@@ -52,11 +52,15 @@ async def forward_anonymous_msg(
     # 5159385139981059251 - Heart, 5104841245755180586 - Fire, 5046509860445903448 - Party
     effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
 
-    await bot.send_message(
-        target_id,
-        l10n.format_value(notify_key, target_lang),
-        message_effect_id=effect_id,
-    )
+    try:
+        await bot.send_message(
+            target_id,
+            l10n.format_value(notify_key, target_lang),
+            message_effect_id=effect_id,
+        )
+    except Exception:
+        # Fallback if effects are invalid or not supported
+        await bot.send_message(target_id, l10n.format_value(notify_key, target_lang))
 
     # Copy message with native reply
     poll_id = None

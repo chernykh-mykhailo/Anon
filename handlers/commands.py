@@ -90,7 +90,10 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext,
             ]
         )
         await message.answer(
-            l10n.format_value("welcome", lang), reply_markup=kb, parse_mode="HTML"
+            l10n.format_value("welcome", lang),
+            reply_markup=kb,
+            parse_mode="HTML",
+            disable_web_page_preview=True,
         )
 
 
@@ -101,7 +104,9 @@ async def cmd_link(message: Message, state: FSMContext, bot):
     bot_info = await bot.get_me()
     user_link = await get_user_link(bot_info, message.from_user.id)
     await message.answer(
-        l10n.format_value("your_link", lang, link=user_link), parse_mode="HTML"
+        l10n.format_value("your_link", lang, link=user_link),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
 

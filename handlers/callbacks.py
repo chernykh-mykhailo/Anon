@@ -14,7 +14,9 @@ async def my_link(callback: types.CallbackQuery, bot: Bot):
     bot_info = await bot.get_me()
     user_link = await get_user_link(bot_info, callback.from_user.id)
     await callback.message.answer(
-        l10n.format_value("your_link", lang, link=user_link), parse_mode="Markdown"
+        l10n.format_value("your_link", lang, link=user_link),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
     )
     await callback.answer()
 
