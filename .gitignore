@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Environment variables
+.env
+
+# Database
+anon_bot.db
+
+# Docker
+docker-compose.override.yml

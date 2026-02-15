@@ -1,0 +1,37 @@
+{
+    "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n— Use /link to get your personal link.\n— Use /lang to change the language.\n— You can <b>reply</b> to anonymous messages directly (just use Reply).\n— You can add <b>reactions</b> to messages — the bot will forward them to the sender.\n— If someone is spamming, you can <b>block</b> them with /block or /report to admin.",
+    "your_link": "Your link for anonymous messages:\n<code>{link}</code>",
+    "button": {
+        "get_link": "🔗 My Link",
+        "help": "❓ Help",
+        "lang_uk": "🇺🇦 Українська",
+        "lang_en": "🇺🇸 English",
+        "send_again": "🆕 Send another message",
+        "block": "🚫 Block",
+        "report": "🚩 Report"
+    },
+    "commands": {
+        "start": "Start bot / Get link",
+        "link": "Get your link",
+        "lang": "Change interface language"
+    },
+    "writing_to": "You are writing an anonymous message. Type your text or send media (Premium emojis supported! ✨)",
+    "msg_sent": "Message sent! ✅",
+    "reply_received": "You've got a reply to your anonymous message! 👇",
+    "reaction_received": "User reacted to your message: {emoji}",
+    "poll_voted": "🗳 Someone voted in your poll! Selected option №{options}",
+    "new_anonymous_msg": "You've got a new anonymous message! 👇",
+    "quote_text": "— Reply to message:",
+    "select_lang": "Select interface language:",
+    "lang_changed": "Language changed to English! 🇺🇸",
+    "user_blocked": "User blocked! 🚫 They won't be able to message you anymore.",
+    "report_sent": "Report sent to moderators. Thank you! 🚩",
+    "msg_blocked": "Sorry, you cannot message this user. 😔",
+    "error": {
+        "self_message": "You can't write to yourself! 😅",
+        "user_not_found": "User not found or they blocked the bot.",
+        "invalid_link": "Invalid link.",
+        "no_reply_target": "I don't know who to send this reply to. Try replying directly to the anonymous message.",
+        "unknown_action": "I don't understand this action. To send an anonymous message, use a link or reply directly to a message you received. ✨"
+    }
+}

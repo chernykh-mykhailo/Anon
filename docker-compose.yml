@@ -1,0 +1,8 @@
+services:
+  bot:
+    build: .
+    volumes:
+      - ./anon_bot.db:/app/anon_bot.db
+    env_file:
+      - .env
+    restart: always
