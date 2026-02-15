@@ -1,11 +1,14 @@
-from aiogram import Router, Bot, types, F
+from aiogram import Router, F, types, Bot
+from aiogram.filters import Command
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
+import random
 
 from l10n import l10n
 from database import db
 from states import Form
 from utils import get_lang
+from voice_engine import text_to_voice, cleanup_voice
 
 router = Router()
 
@@ -133,6 +136,118 @@ async def forward_anonymous_msg(
         ]
     )
     await message.answer(l10n.format_value("msg_sent", sender_lang), reply_markup=kb)
+
+
+@router.message(Command("voice", "voice_m", "voice_f", "voice_j"))
+async def process_voice_command(message: Message, bot: Bot, state: FSMContext):
+    lang = await get_lang(message.from_user.id, message)
+
+    # Determine target and sender
+    target_id = None
+    reply_to_id = None
+
+    # Check if we are in writing_message state
+    state_curr = await state.get_state()
+    if state_curr == Form.writing_message:
+        data = await state.get_data()
+        target_id = data.get("target_id")
+    # Check if it's a reply
+    elif message.reply_to_message:
+        link = db.get_link_by_receiver(
+            message.reply_to_message.message_id, message.chat.id
+        )
+        if link:
+            target_id, reply_to_id, _ = link
+
+    if not target_id:
+        return await message.answer(l10n.format_value("error.no_target", lang))
+
+    # Get text to voice
+    # 1. Text after command
+    cmd_parts = message.text.split(maxsplit=1)
+    text = cmd_parts[1] if len(cmd_parts) > 1 else None
+
+    # 2. If no text after command, use text from replied message (if exists)
+    if not text and message.reply_to_message:
+        text = message.reply_to_message.text or message.reply_to_message.caption
+
+    if not text:
+        return await message.answer(l10n.format_value("error.no_text_voice", lang))
+
+    # Determine gender/preset
+    gender = "m"
+    if message.text.startswith("/voice_f"):
+        gender = "f"
+    elif message.text.startswith("/voice_m"):
+        gender = "m"
+    elif message.text.startswith("/voice_j"):
+        gender = "j"
+    else:
+        gender = random.choice(["m", "f", "j"])
+
+    status_msg = await message.answer("⏳ <i>Озвучую...</i>", parse_mode="HTML")
+
+    try:
+        # Generate voice
+        voice_input = await text_to_voice(text, gender)
+
+        # Notify about new voice message
+        notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
+        target_lang = await get_lang(target_id)
+
+        try:
+            await bot.send_message(
+                target_id,
+                l10n.format_value(notify_key, target_lang) + " 🎤",
+                message_effect_id="5046509860445903448",  # Party effect
+            )
+        except Exception:
+            await bot.send_message(
+                target_id, l10n.format_value(notify_key, target_lang) + " 🎤"
+            )
+
+        # Send voice message to target
+        sent_msg = await bot.send_voice(
+            chat_id=target_id, voice=voice_input, reply_to_message_id=reply_to_id
+        )
+
+        # Send voice message to sender as preview
+        await bot.send_voice(
+            chat_id=message.from_user.id,
+            voice=sent_msg.voice.file_id,
+            caption=l10n.format_value("your_voice_preview", lang),
+        )
+
+        # Save link for future interactions
+        db.save_link(
+            sent_msg.message_id,
+            target_id,
+            message.from_user.id,
+            message.message_id,
+            message.chat.id,
+        )
+
+        # Confirmation to sender
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.write_more", lang),
+                        callback_data=f"write_to_{target_id}",
+                    )
+                ]
+            ]
+        )
+        await status_msg.edit_text(l10n.format_value("msg_sent", lang), reply_markup=kb)
+
+        # Cleanup
+        cleanup_voice(voice_input.path)
+        if state_curr == Form.writing_message:
+            await state.clear()
+
+    except Exception as e:
+        print(f"Error in TTS: {e}")
+        await status_msg.edit_text("❌ Помилка при озвученні. Спробуйте пізніше.")
 
 
 @router.message(Form.writing_message)

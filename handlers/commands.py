@@ -29,6 +29,18 @@ async def set_commands(bot):
             command="lang", description=l10n.format_value("commands.lang", "uk")
         ),
         BotCommand(
+            command="voice", description=l10n.format_value("commands.voice", "uk")
+        ),
+        BotCommand(
+            command="voice_m", description=l10n.format_value("commands.voice_m", "uk")
+        ),
+        BotCommand(
+            command="voice_f", description=l10n.format_value("commands.voice_f", "uk")
+        ),
+        BotCommand(
+            command="voice_j", description=l10n.format_value("commands.voice_j", "uk")
+        ),
+        BotCommand(
             command="block", description="Заблокувати відправника (тільки реплаєм)"
         ),
         BotCommand(command="report", description="Поскаржитись (тільки реплаєм)"),
@@ -42,6 +54,18 @@ async def set_commands(bot):
         ),
         BotCommand(
             command="lang", description=l10n.format_value("commands.lang", "en")
+        ),
+        BotCommand(
+            command="voice", description=l10n.format_value("commands.voice", "en")
+        ),
+        BotCommand(
+            command="voice_m", description=l10n.format_value("commands.voice_m", "en")
+        ),
+        BotCommand(
+            command="voice_f", description=l10n.format_value("commands.voice_f", "en")
+        ),
+        BotCommand(
+            command="voice_j", description=l10n.format_value("commands.voice_j", "en")
         ),
         BotCommand(command="block", description="Block sender (reply only)"),
         BotCommand(command="report", description="Report sender (reply only)"),

@@ -1,5 +1,5 @@
 {
-    "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n— Use /link to get your personal link.\n— Use /lang to change the language.\n— You can <b>reply</b> to anonymous messages directly (just use Reply).\n— You can add <b>reactions</b> to messages — the bot will forward them to the sender.\n— If someone is spamming, you can <b>block</b> them with /block or /report to admin.",
+    "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n— Use /link to get your personal link.\n— Use /lang to change the language.\n— You can <b>reply</b> to messages & add <b>reactions</b>.\n— <b>AI Voice:</b> type /voice [text] to send a voice message! (/voice_m — male, /voice_f — female, /voice_j — funny).\n— If someone spams: /block or /report.",
     "your_link": "Your link for anonymous messages:\n<code>{link}</code>",
     "button": {
         "get_link": "🔗 My Link",
@@ -8,15 +8,21 @@
         "lang_en": "🇺🇸 English",
         "send_again": "🆕 Send another message",
         "block": "🚫 Block",
-        "report": "🚩 Report"
+        "report": "🚩 Report",
+        "write_more": "✍️ Write more"
     },
     "commands": {
         "start": "Start bot / Get link",
         "link": "Get your link",
-        "lang": "Change interface language"
+        "lang": "Change interface language",
+        "voice": "Send anonymous voice",
+        "voice_m": "Male AI Voice",
+        "voice_f": "Female AI Voice",
+        "voice_j": "Funny AI Voice"
     },
-    "writing_to": "You are writing an anonymous message. Type your text or send media (Premium emojis supported! ✨)",
+    "writing_to": "You are writing an anonymous message. Type anything or send media ✨",
     "msg_sent": "Message sent! ✅",
+    "your_voice_preview": "🎧 This is how your message sounds:",
     "reply_received": "You've got a reply to your anonymous message! 👇",
     "reaction_received": "User reacted to your message: {emoji}",
     "poll_voted": "🗳 Someone voted in your poll! Selected option №{options}",
@@ -32,6 +38,8 @@
         "user_not_found": "User not found or they blocked the bot.",
         "invalid_link": "Invalid link.",
         "no_reply_target": "I don't know who to send this reply to. Try replying directly to the anonymous message.",
-        "unknown_action": "I don't understand this action. To send an anonymous message, use a link or reply directly to a message you received. ✨"
+        "unknown_action": "I don't understand this action. ✨",
+        "no_text_voice": "Please provide text after the command or reply to a text message. 🎤",
+        "no_target": "I don't know who to send this to. Use a user's link. 👤"
     }
 }
