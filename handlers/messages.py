@@ -191,7 +191,9 @@ async def process_voice_command(message: Message, bot: Bot, state: FSMContext):
     else:
         gender = random.choice(["m", "f", "j"])
 
-    status_msg = await message.answer("⏳ <i>Озвучую...</i>", parse_mode="HTML")
+    status_msg = await message.answer(
+        l10n.format_value("voicing_message", lang), parse_mode="HTML"
+    )
 
     try:
         # Generate voice
@@ -253,7 +255,7 @@ async def process_voice_command(message: Message, bot: Bot, state: FSMContext):
 
     except Exception as e:
         print(f"Error in TTS: {e}")
-        await status_msg.edit_text("❌ Помилка при озвученні. Спробуйте пізніше.")
+        await status_msg.edit_text(l10n.format_value("error.error_voice", lang))
 
 
 @router.message(Command("draw"))
@@ -275,12 +277,14 @@ async def process_draw_command(message: Message, bot: Bot, state: FSMContext):
     if not target_id:
         return await message.answer(l10n.format_value("error.no_target", lang))
 
+    target_lang = await get_lang(target_id)
+
     cmd_parts = message.text.split(maxsplit=1)
     prompt = cmd_parts[1] if len(cmd_parts) > 1 else None
 
     if not prompt:
         return await message.answer(
-            "🎨 Вкажи текст для листівки після команди (наприклад: <code>/draw Люблю тебе!</code>)",
+            l10n.format_value("error.draw_instruction", lang),
             parse_mode="HTML",
         )
 
@@ -293,7 +297,7 @@ async def process_draw_command(message: Message, bot: Bot, state: FSMContext):
         sent_msg = await bot.send_photo(
             chat_id=target_id,
             photo=image_input,
-            caption="📩 <b>Тобі надіслали анонімну листівку!</b>",
+            caption=l10n.format_value("received_card_caption", target_lang),
             parse_mode="HTML",
         )
 
@@ -373,6 +377,7 @@ async def process_reply(message: Message, bot: Bot):
 @router.message()
 async def process_unknown(message: Message):
     # Only answer if it's not a reply (replies are handled above)
-    if not message.reply_to_message:
+    # AND only in PRIVATE chats to avoid spamming groups
+    if not message.reply_to_message and message.chat.type == "private":
         lang = await get_lang(message.from_user.id, message)
         await message.answer(l10n.format_value("error.unknown_action", lang))

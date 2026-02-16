@@ -1,5 +1,5 @@
 {
-    "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n— Use /link to get your personal link.\n— Use /lang to change the language.\n— You can <b>reply</b> to messages & add <b>reactions</b>.\n— <b>AI Voice:</b> type /voice [text] to send a voice message! (/voice_m — male, /voice_f — female, /voice_j — funny).\n— If someone spams: /block or /report.",
+    "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n— Use /link to get your personal link.\n— Use /lang to change the language.\n— You can <b>reply</b> to messages & add <b>reactions</b>.\n— <b>AI Voice:</b> type <code>/voice </code> [text] to send a voice message! (<code>/voice_m</code> — male, <code>/voice_f</code> — female, <code>/voice_j</code> — funny).\n— If someone spams: <code>/block</code> or <code>/report</code>.",
     "your_link": "Your link for anonymous messages:\n<code>{link}</code>",
     "button": {
         "get_link": "🔗 My Link",
@@ -9,7 +9,8 @@
         "send_again": "🆕 Send another message",
         "block": "🚫 Block",
         "report": "🚩 Report",
-        "write_more": "✍️ Write more"
+        "write_more": "✍️ Write more",
+        "unblock": "🔓 Unblock"
     },
     "commands": {
         "start": "Start bot / Get link",
@@ -19,11 +20,17 @@
         "voice_m": "Male AI Voice",
         "voice_f": "Female AI Voice",
         "voice_j": "Funny AI Voice",
-        "draw": "Generate AI image"
+        "draw": "Create anonymous card",
+        "blocked": "Blocked list",
+        "unblock": "Unblock user"
     },
     "writing_to": "You are writing an anonymous message. Type anything or send media ✨",
-    "msg_sent": "Message sent! ✅",
+    "your_image_preview": "🎨 Here is the card I prepared for sending:",
     "your_voice_preview": "🎧 This is how your message sounds:",
+    "jump_to_message": "Here is the message: 👆",
+    "voicing_message": "⏳ <i>Voicing...</i>",
+    "received_card_caption": "📩 <b>You received an anonymous card!</b>",
+    "msg_sent": "Message sent! ✅",
     "reply_received": "You've got a reply to your anonymous message! 👇",
     "reaction_received": "User reacted to your message: {emoji}",
     "poll_voted": "🗳 Someone voted in your poll! Selected option №{options}",
@@ -33,7 +40,11 @@
     "lang_changed": "Language changed to English! 🇺🇸",
     "user_blocked": "User blocked! 🚫 They won't be able to message you anymore.",
     "report_sent": "Report sent to moderators. Thank you! 🚩",
-    "msg_blocked": "Sorry, you cannot message this user. 😔",
+    "msg_blocked": "Unfortunately, you cannot write to this user. 😔",
+    "user_unblocked": "User unblocked! ✅ Now they can write to you again.",
+    "blocked_list_empty": "Your blocked list is empty. ✨",
+    "blocked_list_title": "🚫 <b>Your blocked list:</b>\n\n",
+    "blocked_list_item": "{index}. 📅 {date} | <a href='{link}'>Message</a>\n",
     "error": {
         "self_message": "You can't write to yourself! 😅",
         "user_not_found": "User not found or they blocked the bot.",
@@ -42,6 +53,9 @@
         "unknown_action": "I don't understand this action. ✨",
         "no_text_voice": "Please provide text after the command or reply to a text message. 🎤",
         "no_target": "I don't know who to send this to. Use a user's link. 👤",
-        "error_draw": "❌ Error generating image. Make sure you have templates in assets/templates/generated/"
+        "error_draw": "❌ Error generating image. Make sure you have templates in assets/templates/generated/",
+        "draw_instruction": "🎨 Please provide text for the card after the command (e.g.: <code>/draw Love you!</code>)",
+        "no_sender_found": "❌ Error: Could not find the sender of this message in the database.",
+        "error_voice": "❌ Error voicing. Please try again later."
     }
 }

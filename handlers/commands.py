@@ -44,6 +44,10 @@ async def set_commands(bot):
             command="block", description="Заблокувати відправника (тільки реплаєм)"
         ),
         BotCommand(command="report", description="Поскаржитись (тільки реплаєм)"),
+        BotCommand(command="blocked", description="Список заблокованих"),
+        BotCommand(
+            command="unblock", description="Розблокувати (реплаєм або /unblock ID)"
+        ),
     ]
     en_commands = [
         BotCommand(
@@ -69,6 +73,8 @@ async def set_commands(bot):
         ),
         BotCommand(command="block", description="Block sender (reply only)"),
         BotCommand(command="report", description="Report sender (reply only)"),
+        BotCommand(command="blocked", description="Blocked list"),
+        BotCommand(command="unblock", description="Unblock (reply or /unblock ID)"),
     ]
 
     await bot.set_my_commands(
@@ -86,6 +92,17 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext,
     lang = await get_lang(message.from_user.id, message)
 
     if args:
+        # Jump to message deep link: /start show_123
+        if args.startswith("show_"):
+            try:
+                msg_to_show = int(args.split("_")[1])
+                return await message.answer(
+                    l10n.format_value("jump_to_message", lang),
+                    reply_to_message_id=msg_to_show,
+                )
+            except Exception:
+                pass  # Continue to user link logic if it was not a valid show_ link
+
         try:
             target_id = int(args)
             if target_id == message.from_user.id:
@@ -166,8 +183,79 @@ async def cmd_block(message: Message):
         return await message.answer(l10n.format_value("error.no_reply_target", lang))
 
     sender_id, _, _ = link
-    db.block_user(message.from_user.id, sender_id)
+    db.block_user(
+        message.from_user.id,
+        sender_id,
+        reason_msg_id=message.reply_to_message.message_id,
+    )
     await message.reply(l10n.format_value("user_blocked", lang))
+
+
+@router.message(Command("unblock"))
+async def cmd_unblock(message: Message, command: CommandObject):
+    lang = await get_lang(message.from_user.id, message)
+
+    # Mode 1: Reply to message
+    if message.reply_to_message:
+        link = db.get_link_by_receiver(
+            message.reply_to_message.message_id, message.chat.id
+        )
+        if not link:
+            return await message.answer(
+                l10n.format_value("error.no_sender_found", lang)
+            )
+
+        sender_id, _, _ = link
+        if db.unblock_user(message.from_user.id, sender_id):
+            return await message.answer(l10n.format_value("user_unblocked", lang))
+        else:
+            return await message.answer("ℹ️ Цей користувач не був заблокований.")
+
+    # Mode 2: By index (/unblock 1)
+    args = command.args
+    if args and args.isdigit():
+        index = int(args)
+        if db.unblock_by_index(message.from_user.id, index):
+            return await message.answer(l10n.format_value("user_unblocked", lang))
+        else:
+            return await message.answer("❌ Некоректний ID зі списку.")
+
+    await message.answer(
+        "❓ Вкажи ID зі списку (наприклад: <code>/unblock 1</code>) або дай відповідь на повідомлення.",
+        parse_mode="HTML",
+    )
+
+
+@router.message(Command("blocked"))
+async def cmd_blocked(message: Message, bot: Bot):
+    lang = await get_lang(message.from_user.id, message)
+    blocked_list = db.get_blocked_list(message.from_user.id)
+
+    if not blocked_list:
+        return await message.answer(l10n.format_value("blocked_list_empty", lang))
+
+    text = l10n.format_value("blocked_list_title", lang)
+    bot_info = await bot.get_me()
+
+    for i, (sender_id, blocked_at, msg_id) in enumerate(blocked_list, 1):
+        # Format date (SQLite usually stores as YYYY-MM-DD HH:MM:SS)
+        date_str = blocked_at.split(".")[0] if "." in blocked_at else blocked_at
+
+        # Determine the correct link format
+        if message.chat.type == "private":
+            # Deep link to message within the bot: /start show_{msg_id}
+            # This is the most robust way for private chats
+            msg_link = f"https://t.me/{bot_info.username}?start=show_{msg_id}"
+        else:
+            # For supergroups, t.me/c/ is the standard
+            chat_id_clean = str(message.chat.id).replace("-100", "")
+            msg_link = f"https://t.me/c/{chat_id_clean}/{msg_id}"
+
+        text += l10n.format_value(
+            "blocked_list_item", lang, index=i, date=date_str, link=msg_link
+        )
+
+    await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
 
 
 @router.message(Command("report"))
@@ -178,7 +266,7 @@ async def cmd_report(message: Message, bot: Bot):
 
     link = db.get_link_by_receiver(message.reply_to_message.message_id, message.chat.id)
     if not link:
-        return await message.answer(l10n.format_value("error.no_reply_target", lang))
+        return await message.answer(l10n.format_value("error.no_sender_found", lang))
 
     sender_id, _, _ = link
     from config import ADMIN_ID, REPORT_CHAT_ID, REPORT_THREAD_ID

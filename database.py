@@ -53,9 +53,23 @@ class Database:
                 CREATE TABLE IF NOT EXISTS user_blocks (
                     user_id INTEGER,
                     blocked_sender_id INTEGER,
+                    blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    reason_msg_id INTEGER,
                     PRIMARY KEY (user_id, blocked_sender_id)
                 )
             """)
+
+            # Migration for user_blocks
+            cursor.execute("PRAGMA table_info(user_blocks)")
+            block_columns = [column[1] for column in cursor.fetchall()]
+            if "blocked_at" not in block_columns:
+                cursor.execute(
+                    "ALTER TABLE user_blocks ADD COLUMN blocked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+                )
+            if "reason_msg_id" not in block_columns:
+                cursor.execute(
+                    "ALTER TABLE user_blocks ADD COLUMN reason_msg_id INTEGER"
+                )
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_settings (
                     user_id INTEGER PRIMARY KEY,
@@ -126,14 +140,43 @@ class Database:
             result = cursor.fetchone()
             return result[0] if result else default
 
-    def block_user(self, user_id, sender_to_block):
+    def block_user(self, user_id, sender_to_block, reason_msg_id=None):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "INSERT OR IGNORE INTO user_blocks (user_id, blocked_sender_id) VALUES (?, ?)",
-                (user_id, sender_to_block),
+                """INSERT OR REPLACE INTO user_blocks 
+                   (user_id, blocked_sender_id, blocked_at, reason_msg_id) 
+                   VALUES (?, ?, CURRENT_TIMESTAMP, ?)""",
+                (user_id, sender_to_block, reason_msg_id),
             )
             conn.commit()
+
+    def unblock_user(self, user_id, sender_to_unblock):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM user_blocks WHERE user_id = ? AND blocked_sender_id = ?",
+                (user_id, sender_to_unblock),
+            )
+            conn.commit()
+            return cursor.rowcount > 0
+
+    def get_blocked_list(self, user_id):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT blocked_sender_id, blocked_at, reason_msg_id FROM user_blocks WHERE user_id = ? ORDER BY blocked_at DESC",
+                (user_id,),
+            )
+            return cursor.fetchall()
+
+    def unblock_by_index(self, user_id, index):
+        # index is 1-based
+        blocked = self.get_blocked_list(user_id)
+        if 0 < index <= len(blocked):
+            target_sender_id = blocked[index - 1][0]
+            return self.unblock_user(user_id, target_sender_id)
+        return False
 
     def is_blocked(self, user_id, sender_id):
         with sqlite3.connect(self.db_path) as conn:
