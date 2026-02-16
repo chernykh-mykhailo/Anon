@@ -73,9 +73,24 @@ class Database:
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_settings (
                     user_id INTEGER PRIMARY KEY,
-                    lang TEXT DEFAULT 'uk'
+                    lang TEXT DEFAULT 'uk',
+                    receive_media INTEGER DEFAULT 1,
+                    receive_messages INTEGER DEFAULT 1
                 )
             """)
+
+            # Migration for user_settings
+            cursor.execute("PRAGMA table_info(user_settings)")
+            settings_columns = [column[1] for column in cursor.fetchall()]
+            if "receive_media" not in settings_columns:
+                cursor.execute(
+                    "ALTER TABLE user_settings ADD COLUMN receive_media INTEGER DEFAULT 1"
+                )
+            if "receive_messages" not in settings_columns:
+                cursor.execute(
+                    "ALTER TABLE user_settings ADD COLUMN receive_messages INTEGER DEFAULT 1"
+                )
+
             conn.commit()
 
     def save_link(
@@ -132,13 +147,42 @@ class Database:
             conn.commit()
 
     def get_user_lang(self, user_id, default="uk"):
+        settings = self.get_user_settings(user_id)
+        return settings.get("lang", default)
+
+    def get_user_settings(self, user_id):
         with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT lang FROM user_settings WHERE user_id = ?", (user_id,)
+                "SELECT lang, receive_media, receive_messages FROM user_settings WHERE user_id = ?",
+                (user_id,),
             )
             result = cursor.fetchone()
-            return result[0] if result else default
+            if result:
+                return dict(result)
+            return {"lang": "uk", "receive_media": 1, "receive_messages": 1}
+
+    def update_user_setting(self, user_id, key, value):
+        # Validate key to prevent injection (though values are parameterized)
+        if key not in ["lang", "receive_media", "receive_messages"]:
+            return False
+
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            # We use a trick to update a specific column by name
+            cursor.execute(
+                f"UPDATE user_settings SET {key} = ? WHERE user_id = ?",
+                (value, user_id),
+            )
+            if cursor.rowcount == 0:
+                # Insert initial record if doesn't exist
+                cursor.execute(
+                    f"INSERT INTO user_settings (user_id, {key}) VALUES (?, ?)",
+                    (user_id, value),
+                )
+            conn.commit()
+            return True
 
     def block_user(self, user_id, sender_to_block, reason_msg_id=None):
         with sqlite3.connect(self.db_path) as conn:

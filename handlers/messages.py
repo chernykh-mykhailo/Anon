@@ -50,6 +50,33 @@ async def forward_anonymous_msg(
     target_lang = await get_lang(target_id)
     sender_lang = await get_lang(sender_id)
 
+    # CHECK SETTINGS
+    target_settings = db.get_user_settings(target_id)
+    if not target_settings["receive_messages"]:
+        return await message.answer(
+            l10n.format_value("user_disabled_messages", sender_lang)
+        )
+
+    # Determine if it's media
+    is_media = any(
+        [
+            message.photo,
+            message.video,
+            message.animation,
+            message.voice,
+            message.audio,
+            message.document,
+            message.sticker,
+            message.video_note,
+            message.poll,  # Polls aren't strictly media but usually go under the same restriction or handled separately
+        ]
+    )
+
+    if is_media and not target_settings["receive_media"]:
+        return await message.answer(
+            l10n.format_value("user_disabled_media", sender_lang)
+        )
+
     # CHECK BLOCKS
     if db.is_blocked(target_id, sender_id):
         return await message.answer(l10n.format_value("msg_blocked", sender_lang))
@@ -168,6 +195,13 @@ async def process_voice_command(message: Message, bot: Bot, state: FSMContext):
     if not target_id:
         return await message.answer(l10n.format_value("error.no_target", lang))
 
+    # CHECK SETTINGS
+    target_settings = db.get_user_settings(target_id)
+    if not target_settings["receive_messages"]:
+        return await message.answer(l10n.format_value("user_disabled_messages", lang))
+    if not target_settings["receive_media"]:
+        return await message.answer(l10n.format_value("user_disabled_media", lang))
+
     # Get text to voice
     # 1. Text after command
     cmd_parts = message.text.split(maxsplit=1)
@@ -276,6 +310,13 @@ async def process_draw_command(message: Message, bot: Bot, state: FSMContext):
 
     if not target_id:
         return await message.answer(l10n.format_value("error.no_target", lang))
+
+    # CHECK SETTINGS
+    target_settings = db.get_user_settings(target_id)
+    if not target_settings["receive_messages"]:
+        return await message.answer(l10n.format_value("user_disabled_messages", lang))
+    if not target_settings["receive_media"]:
+        return await message.answer(l10n.format_value("user_disabled_media", lang))
 
     target_lang = await get_lang(target_id)
 

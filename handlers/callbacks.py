@@ -40,3 +40,26 @@ async def write_to_(callback: types.CallbackQuery, state: FSMContext):
         await callback.answer()
     except Exception:
         await callback.answer()
+
+
+@router.callback_query(F.data.startswith("set_toggle_"))
+async def toggle_setting(callback: types.CallbackQuery):
+    from handlers.commands import get_settings_keyboard
+
+    setting_key = callback.data.replace("set_toggle_", "")
+    # Map keyboard labels/data to database columns if needed
+    db_column = "receive_messages" if setting_key == "messages" else "receive_media"
+
+    # Get current and flip
+    settings = db.get_user_settings(callback.from_user.id)
+    new_value = 0 if settings[db_column] else 1
+
+    db.update_user_setting(callback.from_user.id, db_column, new_value)
+
+    # Update keyboard
+    new_settings = db.get_user_settings(callback.from_user.id)
+    lang = await get_lang(callback.from_user.id, callback.message)
+    await callback.message.edit_reply_markup(
+        reply_markup=get_settings_keyboard(lang, new_settings)
+    )
+    await callback.answer()

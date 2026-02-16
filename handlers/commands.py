@@ -1,5 +1,5 @@
 from aiogram import Router, Bot, F
-from aiogram.filters import CommandStart, CommandObject, Command, or_f
+from aiogram.filters import Command, or_f, CommandObject
 from aiogram.types import (
     Message,
     InlineKeyboardMarkup,
@@ -25,6 +25,7 @@ async def set_commands(bot):
         BotCommand(
             command="link", description=l10n.format_value("commands.link", "uk")
         ),
+        BotCommand(command="help", description="Допомога та інструкції"),
         BotCommand(
             command="lang", description=l10n.format_value("commands.lang", "uk")
         ),
@@ -51,6 +52,9 @@ async def set_commands(bot):
         BotCommand(
             command="donate", description=l10n.format_value("commands.donate", "uk")
         ),
+        BotCommand(
+            command="settings", description=l10n.format_value("commands.settings", "uk")
+        ),
     ]
     en_commands = [
         BotCommand(
@@ -59,6 +63,7 @@ async def set_commands(bot):
         BotCommand(
             command="link", description=l10n.format_value("commands.link", "en")
         ),
+        BotCommand(command="help", description="Help and instructions"),
         BotCommand(
             command="lang", description=l10n.format_value("commands.lang", "en")
         ),
@@ -81,6 +86,9 @@ async def set_commands(bot):
         BotCommand(
             command="donate", description=l10n.format_value("commands.donate", "en")
         ),
+        BotCommand(
+            command="settings", description=l10n.format_value("commands.settings", "en")
+        ),
     ]
 
     await bot.set_my_commands(
@@ -92,9 +100,12 @@ async def set_commands(bot):
     await bot.set_my_commands(uk_commands, scope=BotCommandScopeDefault())
 
 
-@router.message(CommandStart())
-async def cmd_start(message: Message, command: CommandObject, state: FSMContext, bot):
-    args = command.args
+@router.message(Command("start"))
+@router.message(Command("help"))
+async def cmd_start(
+    message: Message, state: FSMContext, bot: Bot, command: CommandObject = None
+):
+    args = command.args if command else None
     lang = await get_lang(message.from_user.id, message)
 
     if args:
@@ -400,3 +411,44 @@ async def cmd_admin(message: Message):
         f"— Всього: <code>{stats['total_blocks']}</code>"
     )
     await message.answer(text, parse_mode="HTML")
+
+
+def get_settings_keyboard(lang, settings):
+    msg_status = (
+        l10n.format_value("status_on", lang)
+        if settings["receive_messages"]
+        else l10n.format_value("status_off", lang)
+    )
+    media_status = (
+        l10n.format_value("status_on", lang)
+        if settings["receive_media"]
+        else l10n.format_value("status_off", lang)
+    )
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"{l10n.format_value('settings_messages', lang)}: {msg_status}",
+                    callback_data="set_toggle_messages",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{l10n.format_value('settings_media', lang)}: {media_status}",
+                    callback_data="set_toggle_media",
+                )
+            ],
+        ]
+    )
+    return kb
+
+
+@router.message(Command("settings"))
+async def cmd_settings(message: Message):
+    lang = await get_lang(message.from_user.id, message)
+    settings = db.get_user_settings(message.from_user.id)
+    kb = get_settings_keyboard(lang, settings)
+    await message.answer(
+        l10n.format_value("settings_title", lang), reply_markup=kb, parse_mode="HTML"
+    )
