@@ -22,7 +22,8 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
     config = VOICES.get(gender, VOICES["m"])
 
     # Create temp directory if not exists
-    temp_dir = "temp_audio"
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    temp_dir = os.path.join(base_dir, "temp")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
 

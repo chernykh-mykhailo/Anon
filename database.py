@@ -75,7 +75,11 @@ class Database:
                     user_id INTEGER PRIMARY KEY,
                     lang TEXT DEFAULT 'uk',
                     receive_media INTEGER DEFAULT 1,
-                    receive_messages INTEGER DEFAULT 1
+                    receive_messages INTEGER DEFAULT 1,
+                    auto_voice INTEGER DEFAULT 0,
+                    voice_gender TEXT DEFAULT 'm',
+                    skip_confirm_voice INTEGER DEFAULT 0,
+                    skip_confirm_media INTEGER DEFAULT 0
                 )
             """)
 
@@ -89,6 +93,22 @@ class Database:
             if "receive_messages" not in settings_columns:
                 cursor.execute(
                     "ALTER TABLE user_settings ADD COLUMN receive_messages INTEGER DEFAULT 1"
+                )
+            if "auto_voice" not in settings_columns:
+                cursor.execute(
+                    "ALTER TABLE user_settings ADD COLUMN auto_voice INTEGER DEFAULT 0"
+                )
+            if "voice_gender" not in settings_columns:
+                cursor.execute(
+                    "ALTER TABLE user_settings ADD COLUMN voice_gender TEXT DEFAULT 'm'"
+                )
+            if "skip_confirm_voice" not in settings_columns:
+                cursor.execute(
+                    "ALTER TABLE user_settings ADD COLUMN skip_confirm_voice INTEGER DEFAULT 0"
+                )
+            if "skip_confirm_media" not in settings_columns:
+                cursor.execute(
+                    "ALTER TABLE user_settings ADD COLUMN skip_confirm_media INTEGER DEFAULT 0"
                 )
 
             conn.commit()
@@ -128,6 +148,16 @@ class Database:
             )
             return cursor.fetchone()
 
+    def get_target_id(self, user_id):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT receiver_chat_id FROM message_links WHERE sender_id = ? ORDER BY rowid DESC LIMIT 1",
+                (user_id,),
+            )
+            res = cursor.fetchone()
+            return res[0] if res else None
+
     def get_link_by_receiver(self, receiver_msg_id, receiver_chat_id):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
@@ -155,17 +185,33 @@ class Database:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT lang, receive_media, receive_messages FROM user_settings WHERE user_id = ?",
+                "SELECT lang, receive_media, receive_messages, auto_voice, voice_gender, skip_confirm_voice, skip_confirm_media FROM user_settings WHERE user_id = ?",
                 (user_id,),
             )
             result = cursor.fetchone()
             if result:
                 return dict(result)
-            return {"lang": "uk", "receive_media": 1, "receive_messages": 1}
+            return {
+                "lang": "uk",
+                "receive_media": 1,
+                "receive_messages": 1,
+                "auto_voice": 0,
+                "voice_gender": "m",
+                "skip_confirm_voice": 0,
+                "skip_confirm_media": 0,
+            }
 
     def update_user_setting(self, user_id, key, value):
         # Validate key to prevent injection (though values are parameterized)
-        if key not in ["lang", "receive_media", "receive_messages"]:
+        if key not in [
+            "lang",
+            "receive_media",
+            "receive_messages",
+            "auto_voice",
+            "voice_gender",
+            "skip_confirm_voice",
+            "skip_confirm_media",
+        ]:
             return False
 
         with sqlite3.connect(self.db_path) as conn:

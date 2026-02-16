@@ -13,6 +13,7 @@ from l10n import l10n
 from database import db
 from states import Form
 from utils import get_lang, get_user_link
+from image_engine import cleanup_image
 
 router = Router()
 
@@ -29,6 +30,7 @@ async def set_commands(bot):
         BotCommand(
             command="lang", description=l10n.format_value("commands.lang", "uk")
         ),
+        BotCommand(command="pic", description=l10n.format_value("commands.pic", "uk")),
         BotCommand(
             command="voice", description=l10n.format_value("commands.voice", "uk")
         ),
@@ -42,18 +44,31 @@ async def set_commands(bot):
             command="voice_j", description=l10n.format_value("commands.voice_j", "uk")
         ),
         BotCommand(
-            command="block", description="Заблокувати відправника (тільки реплаєм)"
+            command="block", description=l10n.format_value("commands.block", "uk")
         ),
-        BotCommand(command="report", description="Поскаржитись (тільки реплаєм)"),
-        BotCommand(command="blocked", description="Список заблокованих"),
         BotCommand(
-            command="unblock", description="Розблокувати (реплаєм або /unblock ID)"
+            command="report", description=l10n.format_value("commands.report", "uk")
+        ),
+        BotCommand(
+            command="blocked", description=l10n.format_value("commands.blocked", "uk")
+        ),
+        BotCommand(
+            command="unblock", description=l10n.format_value("commands.unblock", "uk")
         ),
         BotCommand(
             command="donate", description=l10n.format_value("commands.donate", "uk")
         ),
         BotCommand(
             command="settings", description=l10n.format_value("commands.settings", "uk")
+        ),
+        BotCommand(
+            command="text", description=l10n.format_value("commands.text", "uk")
+        ),
+        BotCommand(
+            command="cancel",
+            description=l10n.format_value("commands.cancel", "uk")
+            if l10n.format_value("commands.cancel", "uk") != "commands.cancel"
+            else "Скасувати",
         ),
     ]
     en_commands = [
@@ -67,6 +82,7 @@ async def set_commands(bot):
         BotCommand(
             command="lang", description=l10n.format_value("commands.lang", "en")
         ),
+        BotCommand(command="pic", description=l10n.format_value("commands.pic", "en")),
         BotCommand(
             command="voice", description=l10n.format_value("commands.voice", "en")
         ),
@@ -79,15 +95,32 @@ async def set_commands(bot):
         BotCommand(
             command="voice_j", description=l10n.format_value("commands.voice_j", "en")
         ),
-        BotCommand(command="block", description="Block sender (reply only)"),
-        BotCommand(command="report", description="Report sender (reply only)"),
-        BotCommand(command="blocked", description="Blocked list"),
-        BotCommand(command="unblock", description="Unblock (reply or /unblock ID)"),
+        BotCommand(
+            command="block", description=l10n.format_value("commands.block", "en")
+        ),
+        BotCommand(
+            command="report", description=l10n.format_value("commands.report", "en")
+        ),
+        BotCommand(
+            command="blocked", description=l10n.format_value("commands.blocked", "en")
+        ),
+        BotCommand(
+            command="unblock", description=l10n.format_value("commands.unblock", "en")
+        ),
         BotCommand(
             command="donate", description=l10n.format_value("commands.donate", "en")
         ),
         BotCommand(
             command="settings", description=l10n.format_value("commands.settings", "en")
+        ),
+        BotCommand(
+            command="text", description=l10n.format_value("commands.text", "en")
+        ),
+        BotCommand(
+            command="cancel",
+            description=l10n.format_value("commands.cancel", "en")
+            if l10n.format_value("commands.cancel", "en") != "commands.cancel"
+            else "Cancel",
         ),
     ]
 
@@ -98,6 +131,20 @@ async def set_commands(bot):
         en_commands, scope=BotCommandScopeDefault(), language_code="en"
     )
     await bot.set_my_commands(uk_commands, scope=BotCommandScopeDefault())
+
+
+@router.message(Command("cancel"))
+async def cmd_cancel(message: Message, state: FSMContext):
+    data = await state.get_data()
+    # Cleanup possible temp images
+    if "current_preview_path" in data:
+        cleanup_image(data["current_preview_path"])
+    if "draw_settings" in data and data["draw_settings"].get("custom_bg_path"):
+        cleanup_image(data["draw_settings"]["custom_bg_path"])
+
+    await state.clear()
+    lang = await get_lang(message.from_user.id, message)
+    await message.answer(l10n.format_value("action_cancelled", lang))
 
 
 @router.message(Command("start"))
@@ -129,14 +176,33 @@ async def cmd_start(
 
             await state.update_data(target_id=target_id)
             await state.set_state(Form.writing_message)
-            await message.answer(l10n.format_value("writing_to", lang))
+
+            # Get target user info for the prompt
+            try:
+                target_chat = await bot.get_chat(target_id)
+                full_name = target_chat.full_name
+                username = target_chat.username
+
+                if username:
+                    # Clearer display with username
+                    name_display = f"{full_name} (@{username})"
+                else:
+                    name_display = full_name
+
+                # Wrap in a way that is most likely to be clickable
+                name_link = f'<a href="tg://user?id={target_id}">{name_display}</a>'
+
+                await message.answer(
+                    l10n.format_value("writing_to_user", lang, name=name_link),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                # Fallback if bot cannot get chat info
+                await message.answer(l10n.format_value("writing_to", lang))
         except ValueError:
             await message.answer(l10n.format_value("error.invalid_link", lang))
     else:
-        # Generate link
-        link = (
-            f"https://t.me/{(await bot.get_me()).username}?start={message.from_user.id}"
-        )
+        # Display standard welcome
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -226,7 +292,9 @@ async def cmd_unblock(message: Message, command: CommandObject):
         if db.unblock_user(message.from_user.id, sender_id):
             return await message.answer(l10n.format_value("user_unblocked", lang))
         else:
-            return await message.answer("ℹ️ Цей користувач не був заблокований.")
+            return await message.answer(
+                l10n.format_value("error.unblock_not_blocked", lang)
+            )
 
     # Mode 2: By index (/unblock 1)
     args = command.args
@@ -235,10 +303,12 @@ async def cmd_unblock(message: Message, command: CommandObject):
         if db.unblock_by_index(message.from_user.id, index):
             return await message.answer(l10n.format_value("user_unblocked", lang))
         else:
-            return await message.answer("❌ Некоректний ID зі списку.")
+            return await message.answer(
+                l10n.format_value("error.unblock_invalid_id", lang)
+            )
 
     await message.answer(
-        "❓ Вкажи ID зі списку (наприклад: <code>/unblock 1</code>) або дай відповідь на повідомлення.",
+        l10n.format_value("error.unblock_instruction", lang),
         parse_mode="HTML",
     )
 
@@ -370,12 +440,17 @@ async def cmd_setlog(message: Message):
         config.REPORT_THREAD_ID = thread_id
 
         thread_info = f" (thread: {thread_id})" if thread_id else ""
+        lang = await get_lang(message.from_user.id, message)
+
         await message.answer(
-            f"✅ Логи активовано для цього чату: <code>{chat_id}</code>{thread_info}\n\n<i>Зміни збережено в .env. Бот тепер шле сюди репорти.</i>",
+            l10n.format_value(
+                "admin.log_activated", lang, chat_id=chat_id, thread_info=thread_info
+            ),
             parse_mode="HTML",
         )
     except Exception as e:
-        await message.answer(f"❌ Помилка при збереженні: {e}")
+        lang = await get_lang(message.from_user.id, message)
+        await message.answer(f"❌ Error saving config: {e}")
 
 
 @router.message(or_f(Command("donate"), F.text.lower().in_(["донат", "donate"])))
@@ -414,30 +489,54 @@ async def cmd_admin(message: Message):
 
 
 def get_settings_keyboard(lang, settings):
-    msg_status = (
-        l10n.format_value("status_on", lang)
-        if settings["receive_messages"]
-        else l10n.format_value("status_off", lang)
-    )
-    media_status = (
-        l10n.format_value("status_on", lang)
-        if settings["receive_media"]
-        else l10n.format_value("status_off", lang)
-    )
+    on = "✅"
+    off = "❌"
+
+    msg_status = on if settings["receive_messages"] else off
+    media_status = on if settings["receive_media"] else off
+    auto_status = on if settings["auto_voice"] else off
+
+    voice_char = settings["voice_gender"]
+    voice_label = l10n.format_value(f"voice_{voice_char}_short", lang)
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text=f"{l10n.format_value('settings_messages', lang)}: {msg_status}",
+                    text=f"{l10n.format_value('settings_messages', lang)} {msg_status}",
                     callback_data="set_toggle_messages",
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text=f"{l10n.format_value('settings_media', lang)}: {media_status}",
+                    text=f"{l10n.format_value('settings_media', lang)} {media_status}",
                     callback_data="set_toggle_media",
                 )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{l10n.format_value('settings_auto_voice', lang)} {auto_status}",
+                    callback_data="set_toggle_auto_voice",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{l10n.format_value('settings_voice_gender', lang)}: {voice_label}",
+                    callback_data="set_cycle_voice",
+                    style="primary",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{l10n.format_value('settings_skip_confirm_voice', lang)} {'✅' if settings['skip_confirm_voice'] else '❌'}",
+                    callback_data="set_toggle_skip_confirm_voice",
+                    style="success" if settings["skip_confirm_voice"] else "danger",
+                ),
+                InlineKeyboardButton(
+                    text=f"{l10n.format_value('settings_skip_confirm_media', lang)} {'✅' if settings['skip_confirm_media'] else '❌'}",
+                    callback_data="set_toggle_skip_confirm_media",
+                    style="success" if settings["skip_confirm_media"] else "danger",
+                ),
             ],
         ]
     )

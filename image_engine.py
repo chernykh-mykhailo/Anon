@@ -14,21 +14,33 @@ def cleanup_image(file_path: str):
         print(f"Error cleaning up image: {e}")
 
 
-async def generate_image_input(text: str) -> str:
-    """Choose a random template and draw text on it."""
+async def generate_image_input(
+    text: str,
+    custom_bg_path: str = None,
+    y_position: str = "center",
+    text_color_input: str = None,
+    use_bg: bool = True,
+) -> str:
+    """Choose a random template or use custom image and draw text on it."""
     # 1. Setup paths
     base_dir = os.path.dirname(os.path.abspath(__file__))
+    temp_dir = os.path.join(base_dir, "temp")
+    if not os.path.exists(temp_dir):
+        os.makedirs(temp_dir)
+
     templates_dir = os.path.join(base_dir, "assets", "templates", "generated")
-    output_path = f"card_{random.randint(1000, 9999)}.png"
+    output_path = os.path.join(temp_dir, f"card_{random.randint(1000, 9999)}.png")
 
-    # Check if templates exist
-    templates = glob.glob(os.path.join(templates_dir, "*.png"))
-    if not templates:
-        raise Exception("No templates found in assets/templates/generated")
+    # 2. Pick template or use custom
+    if custom_bg_path and os.path.exists(custom_bg_path):
+        img = Image.open(custom_bg_path).convert("RGB")
+    else:
+        templates = glob.glob(os.path.join(templates_dir, "*.png"))
+        if not templates:
+            raise Exception("No templates found in assets/templates/generated")
+        template_path = random.choice(templates)
+        img = Image.open(template_path).convert("RGB")
 
-    # 2. Pick random template
-    template_path = random.choice(templates)
-    img = Image.open(template_path).convert("RGB")
     draw = ImageDraw.Draw(img)
     width, height = img.size
 
@@ -70,8 +82,16 @@ async def generate_image_input(text: str) -> str:
         return stat_img.getpixel((0, 0))
 
     brightness = get_avg_brightness(img)
-    text_color = (255, 255, 255) if brightness < 128 else (30, 30, 30)
-    shadow_color = (0, 0, 0, 150) if brightness >= 128 else (255, 255, 255, 100)
+
+    # Choose colors based on brightness or input
+    if text_color_input:
+        text_color = (255, 255, 255) if text_color_input == "white" else (30, 30, 30)
+    else:
+        text_color = (255, 255, 255) if brightness < 128 else (30, 30, 30)
+
+    shadow_color = (
+        (0, 0, 0, 150) if text_color == (255, 255, 255) else (255, 255, 255, 100)
+    )
 
     def wrap_text(text, font, max_width):
         lines = []
@@ -105,24 +125,33 @@ async def generate_image_input(text: str) -> str:
     line_height = draw.textbbox((0, 0), "Ag", font=font)[3] + 15
     total_text_height = len(lines) * line_height
 
+    # Calculate positioning
+    if y_position == "top":
+        start_y = height * 0.15
+    elif y_position == "bottom":
+        start_y = height * 0.85 - total_text_height
+    else:  # center
+        start_y = (height - total_text_height) // 2
+
     # 5. Draw background "glow" for readability
-    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
+    if use_bg:
+        overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
 
-    # Calculate box area
-    box_padding = 40
-    box_y1 = (height - total_text_height) // 2 - box_padding
-    box_y2 = (height + total_text_height) // 2 + box_padding
+        # Calculate box area
+        box_padding = 40
+        box_y1 = start_y - box_padding
+        box_y2 = start_y + total_text_height + box_padding
 
-    # Draw a soft semi-transparent rectangle behind text
-    bg_brightness = (0, 0, 0, 60) if brightness >= 128 else (255, 255, 255, 30)
-    overlay_draw.rectangle(
-        [width * 0.05, box_y1, width * 0.95, box_y2], fill=bg_brightness
-    )
-    img.paste(Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB"))
+        # Draw a soft semi-transparent rectangle behind text
+        bg_brightness = (0, 0, 0, 60) if brightness >= 128 else (255, 255, 255, 30)
+        overlay_draw.rectangle(
+            [width * 0.05, box_y1, width * 0.95, box_y2], fill=bg_brightness
+        )
+        img.paste(Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB"))
 
     # 6. Final Drawing with Pilmoji
-    current_h = (height - total_text_height) // 2
+    current_h = start_y
     with Pilmoji(img) as pilmoji:
         for line in lines:
             line_w = draw.textbbox((0, 0), line, font=font)[2]

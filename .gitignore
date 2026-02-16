@@ -13,3 +13,7 @@ anon_bot.db
 
 # Docker
 docker-compose.override.yml
+
+# Temporary files
+temp/*
+!.gitkeep

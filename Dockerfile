@@ -12,11 +12,15 @@ COPY requirements.txt .
 RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
     fonts-liberation \
+    fonts-freefont-ttf \
     && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .
+
+# Create temp directory
+RUN mkdir -p temp
 
 # Command to run the bot
 CMD ["python", "main.py"]
