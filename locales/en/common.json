@@ -10,7 +10,10 @@
         "block": "🚫 Block",
         "report": "🚩 Report",
         "write_more": "✍️ Write more",
-        "unblock": "🔓 Unblock"
+        "unblock": "🔓 Unblock",
+        "confirm_send": "✅ Send",
+        "confirm_cancel": "❌ Cancel",
+        "confirm_regenerate": "🔄 Re-generate"
     },
     "commands": {
         "start": "Start bot / Get link",

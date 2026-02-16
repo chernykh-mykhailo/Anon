@@ -8,6 +8,11 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Install dependencies
+# Install dependencies and fonts for Cyrillic support
+RUN apt-get update && apt-get install -y \
+    fonts-dejavu-core \
+    fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application code

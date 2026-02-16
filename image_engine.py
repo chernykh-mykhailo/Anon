@@ -36,25 +36,32 @@ async def generate_image_input(text: str) -> str:
     # Priority: 1. Project font, 2. Windows fonts, 3. Linux fonts, 4. Default
     font_paths = [
         os.path.join(base_dir, "assets", "fonts", "font.ttf"),
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "C:\\Windows\\Fonts\\arial.ttf",
         "C:\\Windows\\Fonts\\segoeui.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
-        "/usr/share/fonts/dejavu/DejaVuSans.ttf",
     ]
 
     font = None
+    used_font_path = "default"
     font_size = 50
     for path in font_paths:
         if os.path.exists(path):
             try:
                 font = ImageFont.truetype(path, font_size)
+                used_font_path = path
                 break
             except Exception:
                 continue
 
     if font is None:
         font = ImageFont.load_default()
+        print(
+            "⚠️ Warning: No custom fonts found, using default (Cyrillic may not work)."
+        )
+    else:
+        print(f"✅ Using font: {used_font_path}")
 
     # 4. Text Wrapping & Analysis
     def get_avg_brightness(img):
@@ -86,13 +93,11 @@ async def generate_image_input(text: str) -> str:
         font_size = 40
 
     # Reload font with new size
-    for path in font_paths:
-        if os.path.exists(path):
-            try:
-                font = ImageFont.truetype(path, font_size)
-                break
-            except Exception:
-                continue
+    if used_font_path != "default":
+        try:
+            font = ImageFont.truetype(used_font_path, font_size)
+        except Exception:
+            pass
 
     max_w = width * 0.85
     lines = wrap_text(text, font, max_w)

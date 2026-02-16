@@ -13,8 +13,8 @@ from l10n import l10n
 from database import db
 from states import Form
 from utils import get_lang
-from voice_engine import text_to_voice, cleanup_voice
-from image_engine import generate_image_input, cleanup_image
+from voice_engine import text_to_voice
+from image_engine import generate_image_input
 
 router = Router()
 
@@ -131,14 +131,42 @@ async def forward_anonymous_msg(
         msg_id = sent_msg.message_id
         poll_id = sent_msg.poll.id
     else:
-        # For other messages use copy_message
+        # For other messages use copy_message or specific methods for spoilers
         try:
-            sent_msg_info = await bot.copy_message(
-                chat_id=target_id,
-                from_chat_id=message.chat.id,
-                message_id=message.message_id,
-                reply_to_message_id=reply_to_id,
-            )
+            if message.photo:
+                sent_msg_info = await bot.send_photo(
+                    chat_id=target_id,
+                    photo=message.photo[-1].file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_to_message_id=reply_to_id,
+                    has_spoiler=True,
+                )
+            elif message.video:
+                sent_msg_info = await bot.send_video(
+                    chat_id=target_id,
+                    video=message.video.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_to_message_id=reply_to_id,
+                    has_spoiler=True,
+                )
+            elif message.animation:
+                sent_msg_info = await bot.send_animation(
+                    chat_id=target_id,
+                    animation=message.animation.file_id,
+                    caption=message.caption,
+                    caption_entities=message.caption_entities,
+                    reply_to_message_id=reply_to_id,
+                    has_spoiler=True,
+                )
+            else:
+                sent_msg_info = await bot.copy_message(
+                    chat_id=target_id,
+                    from_chat_id=message.chat.id,
+                    message_id=message.message_id,
+                    reply_to_message_id=reply_to_id,
+                )
         except Exception:
             sent_msg_info = await bot.copy_message(
                 chat_id=target_id,
@@ -233,59 +261,48 @@ async def process_voice_command(message: Message, bot: Bot, state: FSMContext):
         # Generate voice
         voice_input = await text_to_voice(text, gender)
 
-        # Notify about new voice message
-        notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
-        target_lang = await get_lang(target_id)
-
-        try:
-            await bot.send_message(
-                target_id,
-                l10n.format_value(notify_key, target_lang) + " 🎤",
-                message_effect_id="5046509860445903448",  # Party effect
-            )
-        except Exception:
-            await bot.send_message(
-                target_id, l10n.format_value(notify_key, target_lang) + " 🎤"
-            )
-
-        # Send voice message to target
-        sent_msg = await bot.send_voice(
-            chat_id=target_id, voice=voice_input, reply_to_message_id=reply_to_id
+        # Save to state for confirmation
+        await state.update_data(
+            target_id=target_id,
+            reply_to_id=reply_to_id,
+            media_path=voice_input.path,
+            media_type="voice",
+            gender=gender,
+            prompt=text,  # For voice it's the text
         )
+        await state.set_state(Form.confirming_media)
 
-        # Send voice message to sender as preview
-        await bot.send_voice(
-            chat_id=message.from_user.id,
-            voice=sent_msg.voice.file_id,
-            caption=l10n.format_value("your_voice_preview", lang),
-        )
-
-        # Save link for future interactions
-        db.save_link(
-            sent_msg.message_id,
-            target_id,
-            message.from_user.id,
-            message.message_id,
-            message.chat.id,
-        )
-
-        # Confirmation to sender
+        # Show preview to sender
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text=l10n.format_value("button.write_more", lang),
-                        callback_data=f"write_to_{target_id}",
+                        text=l10n.format_value("button.confirm_send", lang),
+                        callback_data="confirm_media_send",
+                    ),
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.confirm_cancel", lang),
+                        callback_data="confirm_media_cancel",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.confirm_regenerate", lang),
+                        callback_data="confirm_media_regen",
                     )
-                ]
+                ],
             ]
         )
-        await status_msg.edit_text(l10n.format_value("msg_sent", lang), reply_markup=kb)
 
-        # Cleanup
-        cleanup_voice(voice_input.path)
-        if state_curr == Form.writing_message:
-            await state.clear()
+        preview_msg = await bot.send_voice(
+            chat_id=message.from_user.id,
+            voice=FSInputFile(voice_input.path),
+            caption=l10n.format_value("your_voice_preview", lang),
+            reply_markup=kb,
+        )
+
+        await status_msg.delete()
+        await state.update_data(preview_msg_id=preview_msg.message_id)
 
     except Exception as e:
         print(f"Error in TTS: {e}")
@@ -318,8 +335,6 @@ async def process_draw_command(message: Message, bot: Bot, state: FSMContext):
     if not target_settings["receive_media"]:
         return await message.answer(l10n.format_value("user_disabled_media", lang))
 
-    target_lang = await get_lang(target_id)
-
     cmd_parts = message.text.split(maxsplit=1)
     prompt = cmd_parts[1] if len(cmd_parts) > 1 else None
 
@@ -333,45 +348,44 @@ async def process_draw_command(message: Message, bot: Bot, state: FSMContext):
 
     try:
         file_path = await generate_image_input(prompt)
-        image_input = FSInputFile(file_path)
 
-        sent_msg = await bot.send_photo(
-            chat_id=target_id,
-            photo=image_input,
-            caption=l10n.format_value("received_card_caption", target_lang),
-            parse_mode="HTML",
+        # Save to state for confirmation
+        await state.update_data(
+            target_id=target_id, media_path=file_path, media_type="draw", prompt=prompt
         )
+        await state.set_state(Form.confirming_media)
 
-        await bot.send_photo(
-            chat_id=message.from_user.id,
-            photo=sent_msg.photo[-1].file_id,
-            caption=l10n.format_value("your_image_preview", lang),
-        )
-
-        cleanup_image(file_path)
-
+        # Show preview to sender
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text=l10n.format_value("button.write_more", lang),
-                        callback_data=f"write_to_{target_id}",
+                        text=l10n.format_value("button.confirm_send", lang),
+                        callback_data="confirm_media_send",
+                    ),
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.confirm_cancel", lang),
+                        callback_data="confirm_media_cancel",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.confirm_regenerate", lang),
+                        callback_data="confirm_media_regen",
                     )
-                ]
+                ],
             ]
         )
-        await status_msg.edit_text(l10n.format_value("msg_sent", lang), reply_markup=kb)
 
-        db.save_link(
-            sent_msg.message_id,
-            target_id,
-            message.from_user.id,
-            message.message_id,
-            message.chat.id,
+        preview_msg = await bot.send_photo(
+            chat_id=message.from_user.id,
+            photo=FSInputFile(file_path),
+            caption=l10n.format_value("your_image_preview", lang),
+            reply_markup=kb,
         )
 
-        if state_curr == Form.writing_message:
-            await state.clear()
+        await status_msg.delete()
+        await state.update_data(preview_msg_id=preview_msg.message_id)
 
     except Exception as e:
         print(f"Error in Draw: {e}")
