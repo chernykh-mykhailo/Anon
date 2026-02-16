@@ -18,11 +18,18 @@
         "voice": "Send anonymous voice",
         "voice_m": "Male AI Voice",
         "voice_f": "Female AI Voice",
-        "voice_j": "Funny AI Voice"
+        "voice_j": "Funny AI Voice",
+        "draw": "Generate AI image",
+        "donate": "Support bot development",
+        "setkey": "Add Gemini API key for drawing",
+        "removekey": "Remove your API key"
     },
     "writing_to": "You are writing an anonymous message. Type anything or send media ✨",
     "msg_sent": "Message sent! ✅",
     "your_voice_preview": "🎧 This is how your message sounds:",
+    "generating_image": "🎨 Drawing your masterpiece... Usually takes about 10-20 seconds.",
+    "your_image_preview": "🎨 This is the drawing I created for sending:",
+    "donate_text": "📬 <b>Support the development</b>\n\nHi! I develop this bot purely on enthusiasm and a desire to create a great product. Your donation will help pay for hosting and add new cool features.\n\n💳 <b>Monobank (Jar):</b> <code>4874 1000 2299 4738</code>\n🔗 <a href='https://send.monobank.ua/jar/9R29UVD9bP'>Direct link</a>\n\n🅿️ <b>PayPal:</b> <code>Myshkode</code>\n🔗 <a href='https://www.paypal.me/Myshkode'>PayPal link</a>\n\nEven a small amount matters! Thank you for the support! ❤️",
     "reply_received": "You've got a reply to your anonymous message! 👇",
     "reaction_received": "User reacted to your message: {emoji}",
     "poll_voted": "🗳 Someone voted in your poll! Selected option №{options}",
@@ -40,6 +47,15 @@
         "no_reply_target": "I don't know who to send this reply to. Try replying directly to the anonymous message.",
         "unknown_action": "I don't understand this action. ✨",
         "no_text_voice": "Please provide text after the command or reply to a text message. 🎤",
-        "no_target": "I don't know who to send this to. Use a user's link. 👤"
+        "no_target": "I don't know who to send this to. Use a user's link. 👤",
+        "error_draw": "❌ Error generating image. Try a shorter prompt."
+    },
+    "setkey": {
+        "instruction": "🔑 <b>Add your Google Gemini API key</b>\n\nThis helps the bot generate AI images for everyone!\n\n<b>How to get a key (free):</b>\n1. Go to <a href='https://aistudio.google.com/apikey'>aistudio.google.com/apikey</a>\n2. Sign in with Google\n3. Click <b>Create API key</b>\n4. Copy the key and send: <code>/setkey YourKey</code>\n\n🔒 Your key is stored securely and used only for image generation.\n📊 Currently in pool: <b>%count%</b> active keys.",
+        "only_private": "🔒 Send this command in <b>private messages</b> to the bot so no one sees your key!",
+        "invalid_key": "❌ This doesn't look like a Gemini API key. It should start with <code>AIza</code>.",
+        "success": "✅ Key added! Thank you for contributing! 🎨\n\nNow there are <b>%count%</b> active keys in the pool.",
+        "removed": "✅ Your key has been removed.",
+        "no_key": "You don't have a saved key yet."
     }
 }

@@ -1,5 +1,5 @@
-from aiogram import Router, Bot
-from aiogram.filters import CommandStart, CommandObject, Command
+from aiogram import Router, Bot, F
+from aiogram.filters import CommandStart, CommandObject, Command, or_f
 from aiogram.types import (
     Message,
     InlineKeyboardMarkup,
@@ -26,6 +26,9 @@ async def set_commands(bot):
             command="link", description=l10n.format_value("commands.link", "uk")
         ),
         BotCommand(
+            command="donate", description=l10n.format_value("commands.donate", "uk")
+        ),
+        BotCommand(
             command="lang", description=l10n.format_value("commands.lang", "uk")
         ),
         BotCommand(
@@ -41,6 +44,12 @@ async def set_commands(bot):
             command="voice_j", description=l10n.format_value("commands.voice_j", "uk")
         ),
         BotCommand(
+            command="draw", description=l10n.format_value("commands.draw", "uk")
+        ),
+        BotCommand(
+            command="setkey", description=l10n.format_value("commands.setkey", "uk")
+        ),
+        BotCommand(
             command="block", description="Заблокувати відправника (тільки реплаєм)"
         ),
         BotCommand(command="report", description="Поскаржитись (тільки реплаєм)"),
@@ -51,6 +60,9 @@ async def set_commands(bot):
         ),
         BotCommand(
             command="link", description=l10n.format_value("commands.link", "en")
+        ),
+        BotCommand(
+            command="donate", description=l10n.format_value("commands.donate", "en")
         ),
         BotCommand(
             command="lang", description=l10n.format_value("commands.lang", "en")
@@ -66,6 +78,12 @@ async def set_commands(bot):
         ),
         BotCommand(
             command="voice_j", description=l10n.format_value("commands.voice_j", "en")
+        ),
+        BotCommand(
+            command="draw", description=l10n.format_value("commands.draw", "en")
+        ),
+        BotCommand(
+            command="setkey", description=l10n.format_value("commands.setkey", "en")
         ),
         BotCommand(command="block", description="Block sender (reply only)"),
         BotCommand(command="report", description="Report sender (reply only)"),
@@ -271,3 +289,100 @@ async def cmd_setlog(message: Message):
         )
     except Exception as e:
         await message.answer(f"❌ Помилка при збереженні: {e}")
+
+
+@router.message(or_f(Command("donate"), F.text.lower().in_(["донат", "donate"])))
+async def cmd_donate(message: Message):
+    lang = await get_lang(message.from_user.id, message)
+    await message.answer(l10n.format_value("donate_text", lang), parse_mode="HTML")
+
+
+@router.message(or_f(Command("admin"), F.text.lower().in_(["статистика", "stats"])))
+async def cmd_admin(message: Message):
+    from config import ADMIN_ID
+
+    if str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    stats = db.get_admin_stats()
+
+    langs_info = "\n".join(
+        [
+            f"— {lang.upper()}: <code>{count}</code>"
+            for lang, count in stats["langs"].items()
+        ]
+    )
+
+    text = (
+        f"📊 <b>АДМІН-ПАНЕЛЬ СТАТИСТИКИ</b>\n\n"
+        f"✉️ <b>Повідомлення:</b>\n"
+        f"— За останні 24г: <code>{stats['msg_24h']}</code>\n"
+        f"— Всього: <code>{stats['msg_total']}</code>\n\n"
+        f"👥 <b>Користувачі:</b>\n"
+        f"— Всього: <code>{stats['total_users']}</code>\n"
+        f"{langs_info}\n\n"
+        f"🔑 <b>Gemini ключі:</b> <code>{db.get_gemini_key_count()}</code> активних\n\n"
+        f"🚫 <b>Блокування:</b>\n"
+        f"— Всього: <code>{stats['total_blocks']}</code>"
+    )
+    await message.answer(text, parse_mode="HTML")
+
+
+@router.message(Command("setkey"))
+async def cmd_setkey(message: Message, command: CommandObject):
+    lang = await get_lang(message.from_user.id, message)
+
+    # Security: only accept in private chat
+    if message.chat.type != "private":
+        await message.answer(
+            l10n.format_value("setkey.only_private", lang), parse_mode="HTML"
+        )
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        return
+
+    # No key provided — show instructions
+    if not command.args:
+        count = db.get_gemini_key_count()
+        text = l10n.format_value("setkey.instruction", lang).replace(
+            "%count%", str(count)
+        )
+        await message.answer(text, parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    api_key = command.args.strip()
+
+    # Validate key format
+    if not api_key.startswith("AIza") or len(api_key) < 30:
+        await message.answer(
+            l10n.format_value("setkey.invalid_key", lang), parse_mode="HTML"
+        )
+        return
+
+    # Save key
+    db.save_gemini_key(message.from_user.id, api_key)
+    count = db.get_gemini_key_count()
+    text = l10n.format_value("setkey.success", lang).replace("%count%", str(count))
+    await message.answer(text, parse_mode="HTML")
+
+    # Delete the message with the key for security
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
+@router.message(Command("removekey"))
+async def cmd_removekey(message: Message):
+    lang = await get_lang(message.from_user.id, message)
+    removed = db.remove_gemini_key(message.from_user.id)
+    if removed:
+        await message.answer(
+            l10n.format_value("setkey.removed", lang), parse_mode="HTML"
+        )
+    else:
+        await message.answer(
+            l10n.format_value("setkey.no_key", lang), parse_mode="HTML"
+        )

@@ -1,6 +1,11 @@
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
-from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    FSInputFile,
+)
 from aiogram.fsm.context import FSMContext
 import random
 
@@ -9,6 +14,7 @@ from database import db
 from states import Form
 from utils import get_lang
 from voice_engine import text_to_voice, cleanup_voice
+from image_engine import generate_image_input, cleanup_image
 
 router = Router()
 
@@ -248,6 +254,94 @@ async def process_voice_command(message: Message, bot: Bot, state: FSMContext):
     except Exception as e:
         print(f"Error in TTS: {e}")
         await status_msg.edit_text("❌ Помилка при озвученні. Спробуйте пізніше.")
+
+
+@router.message(Command("draw"))
+async def process_draw_command(message: Message, bot: Bot, state: FSMContext):
+    lang = await get_lang(message.from_user.id, message)
+    target_id = None
+
+    # Check if we are in writing_message state
+    state_curr = await state.get_state()
+    if state_curr == Form.writing_message:
+        data = await state.get_data()
+        target_id = data.get("target_id")
+    # Check if it's a reply
+    elif message.reply_to_message:
+        link = db.get_link_by_receiver(
+            message.reply_to_message.message_id, message.chat.id
+        )
+        if link:
+            target_id, _, _ = link
+
+    if not target_id:
+        return await message.answer(l10n.format_value("error.no_target", lang))
+
+    cmd_parts = message.text.split(maxsplit=1)
+    prompt = cmd_parts[1] if len(cmd_parts) > 1 else None
+
+    if not prompt:
+        return await message.answer(
+            "🎨 Будь ласка, вкажи, що мені намалювати після команди (наприклад: <code>/draw котик в космосі</code>)",
+            parse_mode="HTML",
+        )
+
+    status_msg = await message.answer(l10n.format_value("generating_image", lang))
+
+    try:
+        file_path = await generate_image_input(prompt)
+        image_input = FSInputFile(file_path)
+
+        # Send to target
+        sent_msg = await bot.send_photo(
+            chat_id=target_id,
+            photo=image_input,
+            caption="🖼 <b>Тобі надіслали анонімний малюнок!</b>",
+            parse_mode="HTML",
+        )
+
+        # Send to sender as preview
+        await bot.send_photo(
+            chat_id=message.from_user.id,
+            photo=sent_msg.photo[-1].file_id,
+            caption=l10n.format_value("your_image_preview", lang),
+        )
+
+        # Cleanup
+        cleanup_image(file_path)
+
+        # Notify sender
+        kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.write_more", lang),
+                        callback_data=f"write_to_{target_id}",
+                    )
+                ]
+            ]
+        )
+        await status_msg.edit_text(l10n.format_value("msg_sent", lang), reply_markup=kb)
+
+        # Save link
+        db.save_link(
+            sent_msg.message_id,
+            target_id,
+            message.from_user.id,
+            message.message_id,
+            message.chat.id,
+        )
+
+        if state_curr == Form.writing_message:
+            await state.clear()
+
+    except Exception as e:
+        print(f"Error in Draw: {e}")
+        error_text = f"{l10n.format_value('error_draw', lang)}\n\n<code>{str(e)}</code>"
+        # Adjust key name if necessary. Based on earlier edits, it's 'error.error_draw' or 'error_draw'.
+        # Checking common.json: it's under "error": { "error_draw": ... } so formatted as "error.error_draw"
+        error_text = f"{l10n.format_value('error.error_draw', lang)}\n\n<b>Причина:</b> <code>{str(e)}</code>"
+        await status_msg.edit_text(error_text, parse_mode="HTML")
 
 
 @router.message(Form.writing_message)
