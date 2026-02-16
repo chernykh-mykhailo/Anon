@@ -22,9 +22,11 @@
         "voice_j": "Funny AI Voice",
         "draw": "Create anonymous card",
         "blocked": "Blocked list",
-        "unblock": "Unblock user"
+        "unblock": "Unblock user",
+        "donate": "Support bot development"
     },
     "writing_to": "You are writing an anonymous message. Type anything or send media ✨",
+    "donate_text": "📬 <b>Support the development</b>\n\nHi! I develop this bot purely on enthusiasm and a desire to create a great product. Your donation will help pay for hosting and add new cool features.\n\n💳 <b>Monobank (Jar):</b> <code>4874 1000 2299 4738</code>\n🔗 <a href='https://send.monobank.ua/jar/9R29UVD9bP'>Direct link</a>\n\n🅿️ <b>PayPal:</b> <code>Myshkode</code>\n🔗 <a href='https://www.paypal.me/Myshkode'>PayPal link</a>\n\nEven a small amount matters! Thank you for the support! ❤️",
     "your_image_preview": "🎨 Here is the card I prepared for sending:",
     "your_voice_preview": "🎧 This is how your message sounds:",
     "jump_to_message": "Here is the message: 👆",

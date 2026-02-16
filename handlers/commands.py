@@ -1,5 +1,5 @@
-from aiogram import Router, Bot
-from aiogram.filters import CommandStart, CommandObject, Command
+from aiogram import Router, Bot, F
+from aiogram.filters import CommandStart, CommandObject, Command, or_f
 from aiogram.types import (
     Message,
     InlineKeyboardMarkup,
@@ -48,6 +48,9 @@ async def set_commands(bot):
         BotCommand(
             command="unblock", description="Розблокувати (реплаєм або /unblock ID)"
         ),
+        BotCommand(
+            command="donate", description=l10n.format_value("commands.donate", "uk")
+        ),
     ]
     en_commands = [
         BotCommand(
@@ -75,6 +78,9 @@ async def set_commands(bot):
         BotCommand(command="report", description="Report sender (reply only)"),
         BotCommand(command="blocked", description="Blocked list"),
         BotCommand(command="unblock", description="Unblock (reply or /unblock ID)"),
+        BotCommand(
+            command="donate", description=l10n.format_value("commands.donate", "en")
+        ),
     ]
 
     await bot.set_my_commands(
@@ -359,3 +365,38 @@ async def cmd_setlog(message: Message):
         )
     except Exception as e:
         await message.answer(f"❌ Помилка при збереженні: {e}")
+
+
+@router.message(or_f(Command("donate"), F.text.lower().in_(["донат", "donate"])))
+async def cmd_donate(message: Message):
+    lang = await get_lang(message.from_user.id, message)
+    await message.answer(l10n.format_value("donate_text", lang), parse_mode="HTML")
+
+
+@router.message(or_f(Command("admin"), F.text.lower().in_(["статистика", "stats"])))
+async def cmd_admin(message: Message):
+    from config import ADMIN_ID
+
+    if str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    stats = db.get_admin_stats()
+
+    langs_info = "\n".join(
+        [
+            f"— {lang.upper()}: <code>{count}</code>"
+            for lang, count in stats["langs"].items()
+        ]
+    )
+
+    text = (
+        f"📊 <b>АДМІН-ПАНЕЛЬ СТАТИСТИКИ</b>\n\n"
+        f"✉️ <b>Повідомлення:</b>\n"
+        f"— Всього: <code>{stats['msg_total']}</code>\n\n"
+        f"👥 <b>Користувачі:</b>\n"
+        f"— Всього: <code>{stats['total_users']}</code>\n"
+        f"{langs_info}\n\n"
+        f"🚫 <b>Блокування:</b>\n"
+        f"— Всього: <code>{stats['total_blocks']}</code>"
+    )
+    await message.answer(text, parse_mode="HTML")

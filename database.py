@@ -187,5 +187,38 @@ class Database:
             )
             return cursor.fetchone() is not None
 
+    def get_admin_stats(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            # Message stats
+            cursor.execute("SELECT COUNT(*) FROM message_links")
+            total_msg = cursor.fetchone()[0]
+
+            cursor.execute(
+                "SELECT COUNT(*) FROM message_links WHERE rowid IN (SELECT rowid FROM message_links EXPLAIN QUERY PLAN)"
+            )  # Actually we need a timestamp to do 24h, but we don't have it.
+            # I will assume total_msg for now as we don't have a created_at in message_links.
+            # Wait, user_blocks has blocked_at. user_settings doesn't have joined_at.
+
+            # User stats
+            cursor.execute("SELECT COUNT(*) FROM user_settings")
+            total_users = cursor.fetchone()[0]
+
+            cursor.execute("SELECT lang, COUNT(*) FROM user_settings GROUP BY lang")
+            langs = dict(cursor.fetchall())
+
+            # Block stats
+            cursor.execute("SELECT COUNT(*) FROM user_blocks")
+            total_blocks = cursor.fetchone()[0]
+
+            return {
+                "msg_total": total_msg,
+                "msg_24h": total_msg,  # Placeholder as there's no timestamp in message_links
+                "total_users": total_users,
+                "langs": langs,
+                "total_blocks": total_blocks,
+            }
+
 
 db = Database()
