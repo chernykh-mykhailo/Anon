@@ -18,7 +18,8 @@
         "voice": "Send anonymous voice",
         "voice_m": "Male AI Voice",
         "voice_f": "Female AI Voice",
-        "voice_j": "Funny AI Voice"
+        "voice_j": "Funny AI Voice",
+        "draw": "Generate AI image"
     },
     "writing_to": "You are writing an anonymous message. Type anything or send media ✨",
     "msg_sent": "Message sent! ✅",
@@ -40,6 +41,7 @@
         "no_reply_target": "I don't know who to send this reply to. Try replying directly to the anonymous message.",
         "unknown_action": "I don't understand this action. ✨",
         "no_text_voice": "Please provide text after the command or reply to a text message. 🎤",
-        "no_target": "I don't know who to send this to. Use a user's link. 👤"
+        "no_target": "I don't know who to send this to. Use a user's link. 👤",
+        "error_draw": "❌ Error generating image. Make sure you have templates in assets/templates/generated/"
     }
 }
