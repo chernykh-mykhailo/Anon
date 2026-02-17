@@ -152,6 +152,35 @@ async def cmd_cancel(message: Message, state: FSMContext):
     await message.answer(l10n.format_value("action_cancelled", lang))
 
 
+@router.message(or_f(Command("admin"), F.text.lower().in_(["статистика", "stats"])))
+async def cmd_admin(message: Message):
+    from config import ADMIN_ID
+
+    if str(message.from_user.id) != str(ADMIN_ID):
+        return
+
+    stats = db.get_admin_stats()
+
+    langs_info = "\n".join(
+        [
+            f"— {lang.upper()}: <code>{count}</code>"
+            for lang, count in stats["langs"].items()
+        ]
+    )
+
+    text = (
+        f"📊 <b>АДМІН-ПАНЕЛЬ СТАТИСТИКИ</b>\n\n"
+        f"✉️ <b>Повідомлення:</b>\n"
+        f"— Всього: <code>{stats['msg_total']}</code>\n\n"
+        f"👥 <b>Користувачі:</b>\n"
+        f"— Всього: <code>{stats['total_users']}</code>\n"
+        f"{langs_info}\n\n"
+        f"🚫 <b>Блокування:</b>\n"
+        f"— Всього: <code>{stats['total_blocks']}</code>"
+    )
+    await message.answer(text, parse_mode="HTML")
+
+
 @router.message(Command("start"))
 @router.message(Command("help"))
 async def cmd_start(
@@ -184,29 +213,16 @@ async def cmd_start(
                 anon_num=db.get_available_anon_num(target_id, message.from_user.id),
             )
             await state.set_state(Form.writing_message)
+            data = await state.get_data()
 
-            # Get target user info for the prompt
-            try:
-                target_chat = await bot.get_chat(target_id)
-                full_name = target_chat.full_name
-                username = target_chat.username
-
-                if username:
-                    # Clearer display with username
-                    name_display = f"{full_name} (@{username})"
-                else:
-                    name_display = full_name
-
-                # Wrap in a way that is most likely to be clickable
-                name_link = f'<a href="tg://user?id={target_id}">{name_display}</a>'
-
-                await message.answer(
-                    l10n.format_value("writing_to_user", lang, name=name_link),
-                    parse_mode="HTML",
-                )
-            except Exception:
-                # Fallback if bot cannot get chat info
-                await message.answer(l10n.format_value("writing_to", lang))
+            # Anonymity fix: Use №NNN instead of real name to avoid leaks
+            anon_num_target = data.get("anon_num") or "№???"
+            await message.answer(
+                l10n.format_value(
+                    "writing_to_user", lang, name=f"<b>{anon_num_target}</b>"
+                ),
+                parse_mode="HTML",
+            )
         except ValueError:
             await message.answer(l10n.format_value("error.invalid_link", lang))
     else:
@@ -465,35 +481,6 @@ async def cmd_setlog(message: Message):
 async def cmd_donate(message: Message):
     lang = await get_lang(message.from_user.id, message)
     await message.answer(l10n.format_value("donate_text", lang), parse_mode="HTML")
-
-
-@router.message(or_f(Command("admin"), F.text.lower().in_(["статистика", "stats"])))
-async def cmd_admin(message: Message):
-    from config import ADMIN_ID
-
-    if str(message.from_user.id) != str(ADMIN_ID):
-        return
-
-    stats = db.get_admin_stats()
-
-    langs_info = "\n".join(
-        [
-            f"— {lang.upper()}: <code>{count}</code>"
-            for lang, count in stats["langs"].items()
-        ]
-    )
-
-    text = (
-        f"📊 <b>АДМІН-ПАНЕЛЬ СТАТИСТИКИ</b>\n\n"
-        f"✉️ <b>Повідомлення:</b>\n"
-        f"— Всього: <code>{stats['msg_total']}</code>\n\n"
-        f"👥 <b>Користувачі:</b>\n"
-        f"— Всього: <code>{stats['total_users']}</code>\n"
-        f"{langs_info}\n\n"
-        f"🚫 <b>Блокування:</b>\n"
-        f"— Всього: <code>{stats['total_blocks']}</code>"
-    )
-    await message.answer(text, parse_mode="HTML")
 
 
 def get_settings_keyboard(lang, settings):

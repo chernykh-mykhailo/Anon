@@ -23,41 +23,48 @@ router = Router()
 
 async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
     """
-    Finds target for the user. Logic: State -> Reply.
-    No longer falls back to DB to avoid "sticky" dialogues after /cancel.
+    Finds target for the user. Logic:
+    1. Reply to anonymous msg -> Returns that person but DOES NOT start persistent dialogue.
+    2. Persistent State -> Returns current target.
     """
     state_data = await state.get_data()
-    target_id = state_data.get("target_id")
+    active_target_id = state_data.get("target_id")
     reply_to_id = state_data.get("reply_to_id")
     anon_num = state_data.get("anon_num")
 
-    # 1. Reply to an anonymous message (highest priority for context change)
+    # 1. Reply to an anonymous message (one-off forward priority)
     if message.reply_to_message:
         link = db.get_link_by_receiver(
             message.reply_to_message.message_id, message.chat.id
         )
         if link:
-            new_target_id, new_reply_to_id, _ = link
-            # Reset anon_num if target changed (new session with another person)
-            if new_target_id != target_id:
-                target_id = new_target_id
-                reply_to_id = new_reply_to_id
-                anon_num = None
+            reply_target_id, reply_to_id, _ = link
 
-    # 2. Update state if we have a target to keep session alive
-    if target_id:
+            # If it's a reply to someone ELSE than our active session, it's a one-off
+            if reply_target_id != active_target_id:
+                # We need a number even for one-off replies
+                anon_num_oneoff = db.get_available_anon_num(
+                    reply_target_id, message.from_user.id
+                )
+                return reply_target_id, reply_to_id, anon_num_oneoff
+
+            # If it's a reply to the CURRENT active session, continue
+            # (fall through to update state below)
+
+    # 2. Update persistent session if active
+    if active_target_id:
         if not anon_num:
-            anon_num = db.get_available_anon_num(target_id, message.from_user.id)
+            anon_num = db.get_available_anon_num(active_target_id, message.from_user.id)
         else:
-            # Keep existing session alive in DB
-            db.update_session(message.from_user.id, target_id)
+            db.update_session(message.from_user.id, active_target_id)
 
         await state.update_data(
-            target_id=target_id, reply_to_id=reply_to_id, anon_num=anon_num
+            target_id=active_target_id, reply_to_id=reply_to_id, anon_num=anon_num
         )
         await state.set_state(Form.writing_message)
+        return active_target_id, reply_to_id, anon_num
 
-    return target_id, reply_to_id
+    return None, None, None
 
 
 async def cleanup_previous_confirmation(chat_id: int, state: FSMContext, bot: Bot):
@@ -97,6 +104,7 @@ async def forward_anonymous_msg(
     state: FSMContext,
     reply_to_id: int = None,
     album: List[Message] = None,
+    anon_num: str = None,
 ):
     target_lang = await get_lang(target_id, bot=bot)
     sender_lang = await get_lang(sender_id, bot=bot)
@@ -135,23 +143,38 @@ async def forward_anonymous_msg(
     # Notify about new message or reply
     notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
     data = await state.get_data()
-    anon_num = data.get("anon_num") or "№???"
 
-    # Message effects (Premium-like animations)
-    # 5159385139981059251 - Heart, 5104841245755180586 - Fire, 5046509860445903448 - Party
+    # Use provided number (one-off) or from state (dialogue)
+    display_name = anon_num or data.get("anon_num") or "№???"
+
+    # Message effects
     effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
+
+    # Start dialogue button for receiver
+    kb_notify = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=l10n.format_value("button.start_dialogue", target_lang),
+                    callback_data=f"write_to_{sender_id}",
+                )
+            ]
+        ]
+    )
 
     try:
         await bot.send_message(
             target_id,
-            l10n.format_value(notify_key, target_lang, name=anon_num),
+            l10n.format_value(notify_key, target_lang, name=display_name),
             message_effect_id=effect_id,
+            reply_markup=kb_notify,
         )
     except Exception:
-        # Fallback if effects are invalid or not supported
+        # Fallback if effects fail
         await bot.send_message(
             target_id,
-            l10n.format_value(notify_key, target_lang, name=anon_num),
+            l10n.format_value(notify_key, target_lang, name=display_name),
+            reply_markup=kb_notify,
         )
 
     # Copy message with native reply
@@ -273,21 +296,25 @@ async def forward_anonymous_msg(
         ]
     )
 
+    # Only show dialogue management if we are in writing state
+    data = await state.get_data()
+    in_dialogue = data.get("target_id") == target_id
+    reply_markup = kb if in_dialogue else None
+
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(message.chat.id, state, bot)
 
-    # Try to get target name for personalized confirmation
-    try:
-        target_chat = await bot.get_chat(target_id)
-        target_name = target_chat.first_name
-        sent_text = l10n.format_value("msg_sent_to", sender_lang, name=target_name)
-    except Exception:
-        sent_text = l10n.format_value("msg_sent", sender_lang)
+    # Anonymity fix: Use display_name (№NNN) instead of real name
+    target_name = display_name or "№???"
+    sent_text = l10n.format_value("msg_sent_to", sender_lang, name=target_name)
 
-    conf_msg = await message.answer(sent_text, reply_markup=kb, parse_mode="HTML")
-    await state.update_data(
-        last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
+    conf_msg = await message.answer(
+        sent_text, reply_markup=reply_markup, parse_mode="HTML"
     )
+    if in_dialogue:
+        await state.update_data(
+            last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
+        )
 
 
 @router.message(Command("text"))
@@ -295,7 +322,7 @@ async def process_text_command(
     message: Message, state: FSMContext, bot: Bot, command: any = None
 ):
     lang = await get_lang(message.from_user.id, message)
-    target_id, reply_to_id = await get_target_and_remind(message, state, bot)
+    target_id, reply_to_id, anon_num = await get_target_and_remind(message, state, bot)
 
     if not target_id:
         return await message.answer(l10n.format_value("error.no_target", lang))
@@ -316,7 +343,13 @@ async def process_text_command(
     message.text = text
 
     await forward_anonymous_msg(
-        bot, message, target_id, message.from_user.id, state, reply_to_id=reply_to_id
+        bot,
+        message,
+        target_id,
+        message.from_user.id,
+        state,
+        reply_to_id=reply_to_id,
+        anon_num=anon_num,
     )
 
     # Restore original text just in case
@@ -329,7 +362,7 @@ async def process_voice_command(
 ):
     lang = await get_lang(message.from_user.id, message)
 
-    target_id, reply_to_id = await get_target_and_remind(message, state, bot)
+    target_id, reply_to_id, _ = await get_target_and_remind(message, state, bot)
 
     if not target_id:
         return await message.answer(l10n.format_value("error.no_target", lang))
@@ -394,15 +427,6 @@ async def process_voice_command(
 
         if user_settings.get("skip_confirm_voice"):
             from handlers.callbacks import confirm_media_send
-
-            # Try to delete previous confirmation to avoid clutter
-            data = await state.get_data()
-            prev_conf_id = data.get("last_conf_msg_id")
-            if prev_conf_id:
-                try:
-                    await bot.delete_message(message.chat.id, prev_conf_id)
-                except Exception:
-                    pass
 
             # Try to get target name for personalized confirmation
             try:
@@ -490,7 +514,7 @@ async def process_pic_command(message: Message, state: FSMContext, bot: Bot):
         return
 
     prompt = parts[1]
-    target_id, _ = await get_target_and_remind(message, state, bot)
+    target_id, _, _ = await get_target_and_remind(message, state, bot)
 
     if not target_id:
         await message.answer(l10n.format_value("error.no_target", lang))
@@ -580,7 +604,7 @@ async def process_pic_command(message: Message, state: FSMContext, bot: Bot):
 async def process_draw_command(message: Message, state: FSMContext, bot: Bot):
     """Handler for /draw command (Draw 2.0)."""
     lang = db.get_user_lang(message.from_user.id)
-    target_id, _ = await get_target_and_remind(message, state, bot)
+    target_id, _, _ = await get_target_and_remind(message, state, bot)
 
     if not target_id:
         await message.answer(l10n.format_value("error.no_target", lang))
@@ -802,7 +826,7 @@ async def process_anonymous_message(
     ):
         await state.clear()
         return
-    target_id, reply_to_id = await get_target_and_remind(message, state, bot)
+    target_id, reply_to_id, _ = await get_target_and_remind(message, state, bot)
     if target_id:
         # Check for Auto-Voice setting
         user_settings = db.get_user_settings(message.from_user.id)
@@ -825,8 +849,8 @@ async def process_anonymous_message(
 async def process_reply(
     message: Message, bot: Bot, state: FSMContext, album: List[Message] = None
 ):
-    # This will sync target from reply to state
-    target_id, reply_to_id = await get_target_and_remind(message, state, bot)
+    # This will sync target from reply
+    target_id, reply_to_id, anon_num = await get_target_and_remind(message, state, bot)
 
     if target_id:
         await forward_anonymous_msg(
@@ -837,6 +861,7 @@ async def process_reply(
             state,
             reply_to_id=reply_to_id,
             album=album,
+            anon_num=anon_num,
         )
     else:
         # Not a known anonymous link
@@ -848,7 +873,7 @@ async def process_unknown(message: Message, state: FSMContext):
     # Only answer if it's not a reply (replies are handled above)
     # AND only in PRIVATE chats to avoid spamming groups
     if not message.reply_to_message and message.chat.type == "private":
-        target_id, _ = await get_target_and_remind(message, state, message.bot)
+        target_id, _, _ = await get_target_and_remind(message, state, message.bot)
         if target_id:
             # We have a target! Process it as an anonymous message
             return await process_anonymous_message(message, state, message.bot)

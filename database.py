@@ -1,9 +1,12 @@
 import sqlite3
 import random
+import os
 
 
 class Database:
-    def __init__(self, db_path="anon_bot.db"):
+    def __init__(self, db_path="data/anon_bot.db"):
+        # Ensure the directory exists to avoid Docker volume mounting issues
+        os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self.db_path = db_path
         self._init_db()
 
@@ -289,12 +292,6 @@ class Database:
             # Message stats
             cursor.execute("SELECT COUNT(*) FROM message_links")
             total_msg = cursor.fetchone()[0]
-
-            cursor.execute(
-                "SELECT COUNT(*) FROM message_links WHERE rowid IN (SELECT rowid FROM message_links EXPLAIN QUERY PLAN)"
-            )  # Actually we need a timestamp to do 24h, but we don't have it.
-            # I will assume total_msg for now as we don't have a created_at in message_links.
-            # Wait, user_blocks has blocked_at. user_settings doesn't have joined_at.
 
             # User stats
             cursor.execute("SELECT COUNT(*) FROM user_settings")

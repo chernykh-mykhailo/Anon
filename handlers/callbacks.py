@@ -39,7 +39,10 @@ async def write_to_(callback: types.CallbackQuery, state: FSMContext):
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
-        await state.update_data(target_id=target_id)
+        await state.update_data(
+            target_id=target_id,
+            anon_num=db.get_available_anon_num(target_id, callback.from_user.id),
+        )
         await state.set_state(Form.writing_message)
         await callback.message.answer(l10n.format_value("writing_to", lang))
         await callback.answer()
@@ -213,33 +216,42 @@ async def confirm_media_send(
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
 
-    # Try to get target name for personalized confirmation
-    try:
-        target_chat = await bot.get_chat(target_id)
-        target_name = target_chat.first_name
-        sent_text = l10n.format_value("msg_sent_to", lang, name=target_name)
-    except Exception:
-        sent_text = l10n.format_value("msg_sent", lang)
+    # Anonymity fix: Use №NNN instead of real name
+    data = await state.get_data()
+    target_name = data.get("anon_num") or "№???"
+    sent_text = l10n.format_value("msg_sent_to", lang, name=target_name)
+
+    # Only show dialogue management if we are in writing state
+    data = await state.get_data()
+    in_dialogue = data.get("target_id") == target_id
+    reply_markup = kb if in_dialogue else None
 
     try:
         await callback.message.edit_caption(
-            caption=sent_text, reply_markup=kb, parse_mode="HTML"
+            caption=sent_text, reply_markup=reply_markup, parse_mode="HTML"
         )
         # If it's media (voice/photo), we save its ID with media flag to remove button later
-        await state.update_data(
-            last_conf_msg_id=callback.message.message_id, last_conf_is_media=True
-        )
+        if in_dialogue:
+            await state.update_data(
+                last_conf_msg_id=callback.message.message_id, last_conf_is_media=True
+            )
     except Exception:
         # If it has no caption (old voices), just answer
         conf_msg = await callback.message.answer(
-            sent_text, reply_markup=kb, parse_mode="HTML"
+            sent_text, reply_markup=reply_markup, parse_mode="HTML"
         )
         # Pure text confirmation CAN be deleted
-        await state.update_data(
-            last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
-        )
+        if in_dialogue:
+            await state.update_data(
+                last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
+            )
 
-    await state.set_state(Form.writing_message)
+    if in_dialogue:
+        await state.set_state(Form.writing_message)
+    else:
+        # If it was a one-off from confirming_media, clear state but don't clear target data?
+        # Actually, let's just clear it to be safe
+        await state.clear()
     await callback.answer()
 
 

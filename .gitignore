@@ -9,7 +9,7 @@ venv/
 .env
 
 # Database
-anon_bot.db
+data/
 
 # Docker
 docker-compose.override.yml

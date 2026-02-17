@@ -1,5 +1,5 @@
 {
-    "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n<blockquote>— Use /link to get your personal link.\n— Use /settings to manage privacy (disable media or messages).\n— Use /pic to create a beautiful card.\n— Use /lang to change the language.\n— You can <b>reply</b> to messages & add <b>reactions</b>.\n— <b>AI Voice:</b> type <code>/voice </code> [text] (<code>/voice_m</code>, <code>/voice_f</code>, <code>/voice_j</code>).\n— Use /donate to support the developer. ❤️\n— If someone spams: <code>/block</code> or <code>/report</code>.</blockquote>",
+    "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n<blockquote>— Use /link to get your personal link.\n— Use /settings to manage privacy.\n— Use /pic to create a beautiful card.\n— You can <b>reply</b> to messages (one-off messages).\n— To chat without replying, click the <b>'Start Dialogue'</b> button below the message.\n— Use /lang to change the language.\n— <b>AI Voice:</b> type <code>/voice </code> [text].\n— If someone spams: <code>/block</code> or <code>/report</code>.</blockquote>",
     "your_link": "Your link for anonymous messages:\n<code>{link}</code>",
     "button": {
         "get_link": "🔗 My Link",
@@ -12,6 +12,7 @@
         "report": "🚩 Report",
         "write_more": "✍️ Write more",
         "stop_writing": "⏹️ Stop writing",
+        "start_dialogue": "💬 Start Dialogue",
         "unblock": "🔓 Unblock",
         "confirm_send": "✅ Send",
         "confirm_cancel": "❌ Cancel",
