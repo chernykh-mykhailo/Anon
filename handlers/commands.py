@@ -143,6 +143,11 @@ async def cmd_cancel(message: Message, state: FSMContext):
         cleanup_image(data["draw_settings"]["custom_bg_path"])
 
     await state.clear()
+    # Also clear from DB
+    target_id = data.get("target_id")
+    if target_id:
+        db.delete_session(message.from_user.id, target_id)
+
     lang = await get_lang(message.from_user.id, message)
     await message.answer(l10n.format_value("action_cancelled", lang))
 
@@ -174,7 +179,10 @@ async def cmd_start(
                     l10n.format_value("error.self_message", lang)
                 )
 
-            await state.update_data(target_id=target_id)
+            await state.update_data(
+                target_id=target_id,
+                anon_num=db.get_available_anon_num(target_id, message.from_user.id),
+            )
             await state.set_state(Form.writing_message)
 
             # Get target user info for the prompt

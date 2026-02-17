@@ -1,4 +1,5 @@
 import sqlite3
+import random
 
 
 class Database:
@@ -98,6 +99,16 @@ class Database:
                 cursor.execute(
                     "ALTER TABLE user_settings ADD COLUMN auto_voice INTEGER DEFAULT 0"
                 )
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS active_sessions (
+                    sender_id INTEGER,
+                    receiver_id INTEGER,
+                    anon_num TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (sender_id, receiver_id)
+                )
+            """)
             if "voice_gender" not in settings_columns:
                 cursor.execute(
                     "ALTER TABLE user_settings ADD COLUMN voice_gender TEXT DEFAULT 'm'"
@@ -168,13 +179,7 @@ class Database:
             return cursor.fetchone()
 
     def set_user_lang(self, user_id, lang):
-        with sqlite3.connect(self.db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT OR REPLACE INTO user_settings (user_id, lang) VALUES (?, ?)",
-                (user_id, lang),
-            )
-            conn.commit()
+        self.update_user_setting(user_id, "lang", lang)
 
     def get_user_lang(self, user_id, default="uk"):
         settings = self.get_user_settings(user_id)
@@ -309,6 +314,67 @@ class Database:
                 "langs": langs,
                 "total_blocks": total_blocks,
             }
+
+    def get_available_anon_num(self, receiver_id: int, sender_id: int) -> str:
+        """Find an available random number for this receiver, excluding ones taken by active sessions."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            # Session is "active" if it was updated in the last 30 minutes
+            cursor.execute(
+                """
+                SELECT anon_num FROM active_sessions 
+                WHERE receiver_id = ? AND sender_id != ? 
+                AND updated_at > datetime('now', '-30 minutes')
+                """,
+                (receiver_id, sender_id),
+            )
+            taken_nums = {row[0] for row in cursor.fetchall()}
+
+            # Create full pool and remove taken
+            pool = [f"№{i:03d}" for i in range(1, 457)]
+            available = [n for n in pool if n not in taken_nums]
+
+            if not available:
+                # Should basically never happen (456 simultaneous writers), but fallback to any random
+                return f"№{random.randint(1, 456):03d}"
+
+            picked = random.choice(available)
+            # Register it
+            self.update_session(sender_id, receiver_id, picked)
+            return picked
+
+    def update_session(self, sender_id: int, receiver_id: int, anon_num: str = None):
+        """Register or update an active session."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            if anon_num:
+                cursor.execute(
+                    """
+                    INSERT INTO active_sessions (sender_id, receiver_id, anon_num, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                    ON CONFLICT(sender_id, receiver_id) DO UPDATE SET 
+                        anon_num = excluded.anon_num,
+                        updated_at = CURRENT_TIMESTAMP
+                    """,
+                    (sender_id, receiver_id, anon_num),
+                )
+            else:
+                # Just update timestamp to keep alive
+                cursor.execute(
+                    "UPDATE active_sessions SET updated_at = CURRENT_TIMESTAMP WHERE sender_id = ? AND receiver_id = ?",
+                    (sender_id, receiver_id),
+                )
+            conn.commit()
+
+    def delete_session(self, sender_id: int, receiver_id: int):
+        """Remove an active session (e.g. on cancel or stop)."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "DELETE FROM active_sessions WHERE sender_id = ? AND receiver_id = ?",
+                (sender_id, receiver_id),
+            )
+            conn.commit()
 
 
 db = Database()

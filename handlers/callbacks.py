@@ -8,6 +8,7 @@ from image_engine import generate_image_input, cleanup_image
 
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
+from handlers.messages import cleanup_previous_confirmation
 
 router = Router()
 
@@ -48,6 +49,11 @@ async def write_to_(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "stop_writing")
 async def stop_writing_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    target_id = data.get("target_id")
+    if target_id:
+        db.delete_session(callback.from_user.id, target_id)
+
     await state.clear()
     lang = await get_lang(callback.from_user.id, callback.message)
     await callback.message.answer(l10n.format_value("action_cancelled", lang))
@@ -153,13 +159,13 @@ async def confirm_media_send(
     notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
     effect_id = "5046509860445903448"  # Party effect
 
+    data = await state.get_data()
+    anon_num = data.get("anon_num") or "№???"
+
     try:
-        notify_text = l10n.format_value(notify_key, target_lang)
-        if media_type == "voice":
-            notify_text += " 🎤"
         await bot.send_message(
             target_id,
-            notify_text,
+            l10n.format_value(notify_key, target_lang, name=anon_num),
             message_effect_id=effect_id,
         )
     except Exception:
@@ -205,13 +211,7 @@ async def confirm_media_send(
     )
 
     # Try to delete previous confirmation to avoid clutter
-    data = await state.get_data()
-    prev_conf_id = data.get("last_conf_msg_id")
-    if prev_conf_id:
-        try:
-            await bot.delete_message(callback.message.chat.id, prev_conf_id)
-        except Exception:
-            pass
+    await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
 
     # Try to get target name for personalized confirmation
     try:
@@ -222,17 +222,22 @@ async def confirm_media_send(
         sent_text = l10n.format_value("msg_sent", lang)
 
     try:
-        updated_msg = await callback.message.edit_caption(
+        await callback.message.edit_caption(
             caption=sent_text, reply_markup=kb, parse_mode="HTML"
         )
-        await state.update_data(last_conf_msg_id=updated_msg.message_id)
+        # If it's media (voice/photo), we save its ID with media flag to remove button later
+        await state.update_data(
+            last_conf_msg_id=callback.message.message_id, last_conf_is_media=True
+        )
     except Exception:
         # If it has no caption (old voices), just answer
         conf_msg = await callback.message.answer(
             sent_text, reply_markup=kb, parse_mode="HTML"
         )
-        await state.update_data(last_conf_msg_id=conf_msg.message_id)
-        # We don't delete anymore to keep history
+        # Pure text confirmation CAN be deleted
+        await state.update_data(
+            last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
+        )
 
     await state.set_state(Form.writing_message)
     await callback.answer()

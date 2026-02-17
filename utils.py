@@ -1,3 +1,5 @@
+import hashlib
+import random
 from typing import Union, Optional
 from aiogram import types, Bot
 from aiogram.types import Message
@@ -33,3 +35,13 @@ async def get_lang(
 
 async def get_user_link(bot_info, user_id: int) -> str:
     return f"https://t.me/{bot_info.username}?start={user_id}"
+
+
+def get_user_slug(user_id: int) -> str:
+    """Generate a short unique-ish string based on user_id."""
+    return hashlib.md5(str(user_id).encode()).hexdigest()[:4].upper()
+
+
+def generate_anon_num() -> str:
+    """Generate a random number as a string №001-№456."""
+    return f"№{random.randint(1, 456):03d}"

@@ -29,6 +29,7 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
     state_data = await state.get_data()
     target_id = state_data.get("target_id")
     reply_to_id = state_data.get("reply_to_id")
+    anon_num = state_data.get("anon_num")
 
     # 1. Reply to an anonymous message (highest priority for context change)
     if message.reply_to_message:
@@ -36,14 +37,56 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
             message.reply_to_message.message_id, message.chat.id
         )
         if link:
-            target_id, reply_to_id, _ = link
+            new_target_id, new_reply_to_id, _ = link
+            # Reset anon_num if target changed (new session with another person)
+            if new_target_id != target_id:
+                target_id = new_target_id
+                reply_to_id = new_reply_to_id
+                anon_num = None
 
     # 2. Update state if we have a target to keep session alive
     if target_id:
-        await state.update_data(target_id=target_id, reply_to_id=reply_to_id)
+        if not anon_num:
+            anon_num = db.get_available_anon_num(target_id, message.from_user.id)
+        else:
+            # Keep existing session alive in DB
+            db.update_session(message.from_user.id, target_id)
+
+        await state.update_data(
+            target_id=target_id, reply_to_id=reply_to_id, anon_num=anon_num
+        )
         await state.set_state(Form.writing_message)
 
     return target_id, reply_to_id
+
+
+async def cleanup_previous_confirmation(chat_id: int, state: FSMContext, bot: Bot):
+    """
+    Cleans up the previous confirmation message.
+    - If it was media (voice/photo), remove its keyboard.
+    - If it was text, delete it completely.
+    """
+    data = await state.get_data()
+    prev_conf_id = data.get("last_conf_msg_id")
+    if not prev_conf_id:
+        return
+
+    is_media = data.get("last_conf_is_media", False)
+    if is_media:
+        try:
+            await bot.edit_message_reply_markup(
+                chat_id=chat_id, message_id=prev_conf_id, reply_markup=None
+            )
+        except Exception:
+            pass
+    else:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=prev_conf_id)
+        except Exception:
+            pass
+
+    # Clear current
+    await state.update_data(last_conf_msg_id=None, last_conf_is_media=False)
 
 
 async def forward_anonymous_msg(
@@ -91,6 +134,8 @@ async def forward_anonymous_msg(
 
     # Notify about new message or reply
     notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
+    data = await state.get_data()
+    anon_num = data.get("anon_num") or "№???"
 
     # Message effects (Premium-like animations)
     # 5159385139981059251 - Heart, 5104841245755180586 - Fire, 5046509860445903448 - Party
@@ -99,12 +144,15 @@ async def forward_anonymous_msg(
     try:
         await bot.send_message(
             target_id,
-            l10n.format_value(notify_key, target_lang),
+            l10n.format_value(notify_key, target_lang, name=anon_num),
             message_effect_id=effect_id,
         )
     except Exception:
         # Fallback if effects are invalid or not supported
-        await bot.send_message(target_id, l10n.format_value(notify_key, target_lang))
+        await bot.send_message(
+            target_id,
+            l10n.format_value(notify_key, target_lang, name=anon_num),
+        )
 
     # Copy message with native reply
     poll_id = None
@@ -226,13 +274,7 @@ async def forward_anonymous_msg(
     )
 
     # Try to delete previous confirmation to avoid clutter
-    data = await state.get_data()
-    prev_conf_id = data.get("last_conf_msg_id")
-    if prev_conf_id:
-        try:
-            await bot.delete_message(message.chat.id, prev_conf_id)
-        except Exception:
-            pass
+    await cleanup_previous_confirmation(message.chat.id, state, bot)
 
     # Try to get target name for personalized confirmation
     try:
@@ -243,7 +285,9 @@ async def forward_anonymous_msg(
         sent_text = l10n.format_value("msg_sent", sender_lang)
 
     conf_msg = await message.answer(sent_text, reply_markup=kb, parse_mode="HTML")
-    await state.update_data(last_conf_msg_id=conf_msg.message_id)
+    await state.update_data(
+        last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
+    )
 
 
 @router.message(Command("text"))
@@ -368,13 +412,19 @@ async def process_voice_command(
             except Exception:
                 sent_text = l10n.format_value("msg_sent", lang)
 
+            # Try to delete previous text confirmation to avoid clutter
+            await cleanup_previous_confirmation(message.chat.id, state, bot)
+
             # Send the voice to the sender as a confirmation/preview
             sent_voice = await message.answer_voice(
                 voice=FSInputFile(voice_input.path),
                 caption=sent_text,
                 parse_mode="HTML",
             )
-            await state.update_data(last_conf_msg_id=sent_voice.message_id)
+            # We save it with media flag to remove button later
+            await state.update_data(
+                last_conf_msg_id=sent_voice.message_id, last_conf_is_media=True
+            )
             await status_msg.delete()
 
             class MockCallback:
@@ -752,8 +802,7 @@ async def process_anonymous_message(
     ):
         await state.clear()
         return
-    data = await state.get_data()
-    target_id = data.get("target_id")
+    target_id, reply_to_id = await get_target_and_remind(message, state, bot)
     if target_id:
         # Check for Auto-Voice setting
         user_settings = db.get_user_settings(message.from_user.id)
