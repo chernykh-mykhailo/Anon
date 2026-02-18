@@ -160,6 +160,7 @@ async def cmd_admin(message: Message):
         return
 
     stats = db.get_admin_stats()
+    current_cd = db.get_global_config("message_cooldown", "0")
 
     langs_info = "\n".join(
         [
@@ -175,10 +176,20 @@ async def cmd_admin(message: Message):
         f"👥 <b>Користувачі:</b>\n"
         f"— Всього: <code>{stats['total_users']}</code>\n"
         f"{langs_info}\n\n"
-        f"🚫 <b>Блокування:</b>\n"
-        f"— Всього: <code>{stats['total_blocks']}</code>"
+        f"— Всього: <code>{stats['total_blocks']}</code>\n\n"
+        f"⏱️ <b>Затримка (CD):</b> <code>{current_cd} сек.</code>"
     )
-    await message.answer(text, parse_mode="HTML")
+
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⏱️ Встановити КД", callback_data="admin_set_cooldown"
+                )
+            ]
+        ]
+    )
+    await message.answer(text, parse_mode="HTML", reply_markup=kb)
 
 
 @router.message(Command("start"))
@@ -213,16 +224,33 @@ async def cmd_start(
                 anon_num=db.get_available_anon_num(target_id, message.from_user.id),
             )
             await state.set_state(Form.writing_message)
-            data = await state.get_data()
+            # When clicking a link, the sender knows who they are writing to.
+            # We show and save the name.
+            target_name = "Anonymous"
+            try:
+                target_chat = await bot.get_chat(target_id)
+                full_name = target_chat.full_name
+                username = target_chat.username
+                target_name = full_name  # Save for confirmation messages
 
-            # Anonymity fix: Use №NNN instead of real name to avoid leaks
-            anon_num_target = data.get("anon_num") or "№???"
-            await message.answer(
-                l10n.format_value(
-                    "writing_to_user", lang, name=f"<b>{anon_num_target}</b>"
-                ),
-                parse_mode="HTML",
-            )
+                name_display = f"{full_name} (@{username})" if username else full_name
+                name_link = f'<a href="tg://user?id={target_id}">{name_display}</a>'
+
+                await state.update_data(target_name=target_name)
+                data = await state.get_data()
+                await message.answer(
+                    l10n.format_value("writing_to_user", lang, name=name_link),
+                    parse_mode="HTML",
+                )
+            except Exception:
+                # Fallback if chat info cannot be fetched
+                anon_num_target = data.get("anon_num") or "№???"
+                await message.answer(
+                    l10n.format_value(
+                        "writing_to_user", lang, name=f"<b>{anon_num_target}</b>"
+                    ),
+                    parse_mode="HTML",
+                )
         except ValueError:
             await message.answer(l10n.format_value("error.invalid_link", lang))
     else:

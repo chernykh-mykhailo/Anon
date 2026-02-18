@@ -1,4 +1,5 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, FSInputFile
+from typing import Union
 from l10n import l10n
 from database import db
 from states import Form
@@ -8,9 +9,24 @@ from image_engine import generate_image_input, cleanup_image
 
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.storage.base import StorageKey
 from handlers.messages import cleanup_previous_confirmation
 
 router = Router()
+
+
+@router.callback_query(F.data == "admin_set_cooldown")
+async def admin_set_cooldown_callback(callback: types.CallbackQuery, state: FSMContext):
+    from config import ADMIN_ID
+
+    if str(callback.from_user.id) != str(ADMIN_ID):
+        return await callback.answer("У вас немає прав 🤡")
+
+    await state.set_state(Form.setting_cooldown)
+    await callback.message.answer(
+        "Введіть нове значення КД (затримки) в секундах (0 — вимкнути):"
+    )
+    await callback.answer()
 
 
 @router.callback_query(F.data == "my_link")
@@ -44,7 +60,9 @@ async def write_to_(callback: types.CallbackQuery, state: FSMContext):
             anon_num=db.get_available_anon_num(target_id, callback.from_user.id),
         )
         await state.set_state(Form.writing_message)
-        await callback.message.answer(l10n.format_value("writing_to", lang))
+        await callback.message.answer(
+            l10n.format_value("writing_to", lang), parse_mode="HTML"
+        )
         await callback.answer()
     except Exception:
         await callback.answer()
@@ -140,15 +158,17 @@ async def confirm_media_cancel(callback: types.CallbackQuery, state: FSMContext)
 
 @router.callback_query(Form.confirming_media, F.data == "confirm_media_send")
 async def confirm_media_send(
-    callback: types.CallbackQuery, state: FSMContext, bot: Bot
+    callback: Union[types.CallbackQuery, any],
+    state: FSMContext,
+    bot: Bot,
+    check_cd: bool = True,
 ):
     data = await state.get_data()
     target_id = data.get("target_id")
     reply_to_id = data.get("reply_to_id")
     media_path = data.get("media_path")
     media_type = data.get("media_type")
-
-    lang = await get_lang(callback.from_user.id, callback.message)
+    lang = db.get_user_lang(callback.from_user.id)
 
     if not target_id or not media_path:
         await callback.answer(
@@ -158,21 +178,66 @@ async def confirm_media_send(
 
     target_lang = await get_lang(target_id)
 
-    # Notify about new message
-    notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
-    effect_id = "5046509860445903448"  # Party effect
+    # COOLDOWN CHECK (Robust)
+    if check_cd:
+        cd_seconds = int(db.get_global_config("message_cooldown", "0"))
+        allowed, remain = db.check_and_reserve_cooldown(
+            callback.from_user.id, target_id, cd_seconds
+        )
+        if not allowed:
+            return await callback.answer(
+                l10n.format_value("error.cooldown", lang, seconds=remain),
+                show_alert=True,
+            )
 
+    # Notify about new message or reply
+    notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
     data = await state.get_data()
-    anon_num = data.get("anon_num") or "№???"
+    display_name = data.get("anon_num") or "№???"
+
+    # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
+    try:
+        target_state_ctx = FSMContext(
+            storage=state.storage,
+            key=StorageKey(bot_id=bot.id, chat_id=target_id, user_id=target_id),
+        )
+        target_data = await target_state_ctx.get_data()
+        if target_data.get("target_id") == callback.from_user.id and target_data.get(
+            "target_name"
+        ):
+            display_name = target_data.get("target_name")
+    except Exception:
+        pass
+
+    # Message effects
+    effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
+
+    # Start dialogue button for receiver
+    kb_notify = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=l10n.format_value("button.start_dialogue", target_lang),
+                    callback_data=f"write_to_{callback.from_user.id}",
+                )
+            ]
+        ]
+    )
 
     try:
         await bot.send_message(
             target_id,
-            l10n.format_value(notify_key, target_lang, name=anon_num),
+            l10n.format_value(notify_key, target_lang, name=display_name),
             message_effect_id=effect_id,
+            reply_markup=kb_notify,
         )
     except Exception:
-        pass
+        # Fallback
+        await bot.send_message(
+            target_id,
+            l10n.format_value(notify_key, target_lang, name=display_name),
+            reply_markup=kb_notify,
+        )
 
     # Send media to target
     if media_type == "voice":
@@ -216,15 +281,33 @@ async def confirm_media_send(
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
 
-    # Anonymity fix: Use №NNN instead of real name
-    data = await state.get_data()
-    target_name = data.get("anon_num") or "№???"
-    sent_text = l10n.format_value("msg_sent_to", lang, name=target_name)
-
-    # Only show dialogue management if we are in writing state
+    # Anonymity fix: Use №NNN instead of real name for replies
     data = await state.get_data()
     in_dialogue = data.get("target_id") == target_id
-    reply_markup = kb if in_dialogue else None
+    saved_name = data.get("target_name")
+
+    if in_dialogue and saved_name:
+        target_name_to_show = saved_name
+    else:
+        target_name_to_show = data.get("anon_num") or "№???"
+
+    sent_text = l10n.format_value("msg_sent_to", lang, name=target_name_to_show)
+
+    # Only show dialogue management
+    if in_dialogue:
+        reply_markup = kb
+    else:
+        # Even if not in dialogue, show a button to start it
+        reply_markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.write_more", lang),
+                        callback_data=f"write_to_{target_id}",
+                    )
+                ]
+            ]
+        )
 
     try:
         await callback.message.edit_caption(
@@ -340,7 +423,22 @@ async def process_draw_callback(
         # CHECK QUICK SEND SETTING
         user_settings = db.get_user_settings(callback.from_user.id)
         if user_settings.get("skip_confirm_media"):
-            await confirm_media_send(callback, state, bot)
+            # Mock a callback for confirm_media_send
+            class MockCallback:
+                def __init__(self, message, user):
+                    self.message = message
+                    self.from_user = user
+
+                async def answer(self, text=None, show_alert=False):
+                    if text and show_alert:
+                        await self.message.answer(text)
+
+            await confirm_media_send(
+                MockCallback(callback.message, callback.from_user),
+                state,
+                bot,
+                check_cd=False,
+            )
             return
 
         # Regular confirmation flow

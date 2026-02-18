@@ -11,12 +11,15 @@ from aiogram.types import (
 )
 from aiogram.fsm.context import FSMContext
 
+from aiogram.fsm.storage.base import StorageKey
 from l10n import l10n
 from database import db
 from states import Form
 from utils import get_lang
 from voice_engine import text_to_voice
 from image_engine import generate_image_input, cleanup_image
+
+DEFAULT_COOLDOWN = 0
 
 router = Router()
 
@@ -103,8 +106,10 @@ async def forward_anonymous_msg(
     sender_id: int,
     state: FSMContext,
     reply_to_id: int = None,
-    album: List[Message] = None,
     anon_num: str = None,
+    album: List[Message] = None,
+    override_text: str = None,
+    check_cd: bool = True,
 ):
     target_lang = await get_lang(target_id, bot=bot)
     sender_lang = await get_lang(sender_id, bot=bot)
@@ -127,7 +132,7 @@ async def forward_anonymous_msg(
             message.document,
             message.sticker,
             message.video_note,
-            message.poll,  # Polls aren't strictly media but usually go under the same restriction or handled separately
+            message.poll,
         ]
     )
 
@@ -140,12 +145,39 @@ async def forward_anonymous_msg(
     if db.is_blocked(target_id, sender_id):
         return await message.answer(l10n.format_value("msg_blocked", sender_lang))
 
+    # COOLDOWN CHECK (Robust version)
+    if check_cd:
+        cd_seconds = int(db.get_global_config("message_cooldown", DEFAULT_COOLDOWN))
+        allowed, remain = db.check_and_reserve_cooldown(
+            sender_id, target_id, cd_seconds
+        )
+        if not allowed:
+            return await message.answer(
+                l10n.format_value("error.cooldown", sender_lang, seconds=remain)
+            )
+
     # Notify about new message or reply
     notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
     data = await state.get_data()
 
-    # Use provided number (one-off) or from state (dialogue)
+    # Determine display name for receiver
+    # Default is the anonymous number
     display_name = anon_num or data.get("anon_num") or "№???"
+
+    # REVEAL LOGIC: If the receiver (target_id) started this conversation via a link
+    # they already know the sender's identity. Let's use it if saved in their state.
+    try:
+        target_state_ctx = FSMContext(
+            storage=state.storage,
+            key=StorageKey(bot_id=bot.id, chat_id=target_id, user_id=target_id),
+        )
+        target_data = await target_state_ctx.get_data()
+
+        # If the receiver is currently in a dialogue with this sender and has their name
+        if target_data.get("target_id") == sender_id and target_data.get("target_name"):
+            display_name = target_data.get("target_name")
+    except Exception:
+        pass
 
     # Message effects
     effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
@@ -260,18 +292,30 @@ async def forward_anonymous_msg(
                     has_spoiler=True,
                 )
             else:
+                if override_text:
+                    sent_msg_info = await bot.send_message(
+                        chat_id=target_id,
+                        text=override_text,
+                        reply_to_message_id=reply_to_id,
+                    )
+                else:
+                    sent_msg_info = await bot.copy_message(
+                        chat_id=target_id,
+                        from_chat_id=message.chat.id,
+                        message_id=message.message_id,
+                        reply_to_message_id=reply_to_id,
+                    )
+        except Exception:
+            if override_text:
+                sent_msg_info = await bot.send_message(
+                    chat_id=target_id, text=override_text
+                )
+            else:
                 sent_msg_info = await bot.copy_message(
                     chat_id=target_id,
                     from_chat_id=message.chat.id,
                     message_id=message.message_id,
-                    reply_to_message_id=reply_to_id,
                 )
-        except Exception:
-            sent_msg_info = await bot.copy_message(
-                chat_id=target_id,
-                from_chat_id=message.chat.id,
-                message_id=message.message_id,
-            )
         msg_id = sent_msg_info.message_id
 
     # Save link for future interactions
@@ -296,17 +340,38 @@ async def forward_anonymous_msg(
         ]
     )
 
-    # Only show dialogue management if we are in writing state
+    # Only show dialogue management
     data = await state.get_data()
     in_dialogue = data.get("target_id") == target_id
-    reply_markup = kb if in_dialogue else None
+
+    if in_dialogue:
+        reply_markup = kb
+    else:
+        # Even if not in dialogue, show a button to start it
+        reply_markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.write_more", sender_lang),
+                        callback_data=f"write_to_{target_id}",
+                    )
+                ]
+            ]
+        )
 
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(message.chat.id, state, bot)
 
-    # Anonymity fix: Use display_name (№NNN) instead of real name
-    target_name = display_name or "№???"
-    sent_text = l10n.format_value("msg_sent_to", sender_lang, name=target_name)
+    # Logic for name display:
+    # Use real name ONLY if we are in an active dialogue started via link with this exact target.
+    # For one-off replies or anonymous dialogs, use №NNN.
+    saved_name = data.get("target_name")
+    if in_dialogue and saved_name:
+        target_name_to_show = saved_name
+    else:
+        target_name_to_show = display_name or "№???"
+
+    sent_text = l10n.format_value("msg_sent_to", sender_lang, name=target_name_to_show)
 
     conf_msg = await message.answer(
         sent_text, reply_markup=reply_markup, parse_mode="HTML"
@@ -337,11 +402,6 @@ async def process_text_command(
     if not text:
         return await message.answer(l10n.format_value("error.text_instruction", lang))
 
-    # Forward as text (ignoring auto-voice)
-    # We temporarily mock the message text to the extracted text for forward_anonymous_msg
-    orig_text = message.text
-    message.text = text
-
     await forward_anonymous_msg(
         bot,
         message,
@@ -350,15 +410,17 @@ async def process_text_command(
         state,
         reply_to_id=reply_to_id,
         anon_num=anon_num,
+        override_text=text,
     )
-
-    # Restore original text just in case
-    message.text = orig_text
 
 
 @router.message(Command("voice", "voice_m", "voice_f", "voice_j"))
 async def process_voice_command(
-    message: Message, state: FSMContext, bot: Bot, command: any = None
+    message: Message,
+    state: FSMContext,
+    bot: Bot,
+    command: any = None,
+    check_cd: bool = True,
 ):
     lang = await get_lang(message.from_user.id, message)
 
@@ -436,8 +498,16 @@ async def process_voice_command(
             except Exception:
                 sent_text = l10n.format_value("msg_sent", lang)
 
-            # Try to delete previous text confirmation to avoid clutter
-            await cleanup_previous_confirmation(message.chat.id, state, bot)
+            # Check CD before sending preview/confirmation
+            cd_seconds = int(db.get_global_config("message_cooldown", DEFAULT_COOLDOWN))
+            allowed, remain = db.check_and_reserve_cooldown(
+                message.from_user.id, target_id, cd_seconds
+            )
+            if not allowed:
+                await status_msg.delete()
+                return await message.answer(
+                    l10n.format_value("error.cooldown", lang, seconds=remain)
+                )
 
             # Send the voice to the sender as a confirmation/preview
             sent_voice = await message.answer_voice(
@@ -456,11 +526,15 @@ async def process_voice_command(
                     self.message = message
                     self.from_user = user
 
-                async def answer(self, *args, **kwargs):
-                    pass
+                async def answer(self, text=None, show_alert=False):
+                    if text and show_alert:
+                        await self.message.answer(text)
 
             await confirm_media_send(
-                MockCallback(sent_voice, message.from_user), state, bot
+                MockCallback(sent_voice, message.from_user),
+                state,
+                bot,
+                check_cd=False,
             )
             return
 
@@ -517,8 +591,9 @@ async def process_pic_command(message: Message, state: FSMContext, bot: Bot):
     target_id, _, _ = await get_target_and_remind(message, state, bot)
 
     if not target_id:
-        await message.answer(l10n.format_value("error.no_target", lang))
-        return
+        return await message.answer(l10n.format_value("error.no_target", lang))
+
+    # Check privacy
 
     # Check privacy
     target_settings = db.get_user_settings(target_id)
@@ -547,23 +622,38 @@ async def process_pic_command(message: Message, state: FSMContext, bot: Bot):
         if user_settings.get("skip_confirm_media"):
             from handlers.callbacks import confirm_media_send
 
+            # Check CD before sending preview/confirmation
+            cd_seconds = int(db.get_global_config("message_cooldown", DEFAULT_COOLDOWN))
+            allowed, remain = db.check_and_reserve_cooldown(
+                message.from_user.id, target_id, cd_seconds
+            )
+            if not allowed:
+                # Clean up correct wait msg
+                await bot.delete_message(message.chat.id, wait_msg.message_id)
+                return await message.answer(
+                    l10n.format_value("error.cooldown", lang, seconds=remain)
+                )
+
             # Send the photo to the sender as a confirmation/preview
             sent_pic = await message.answer_photo(
                 photo=FSInputFile(file_path),
                 caption=l10n.format_value("msg_sent", lang),
             )
-            await wait_msg.delete()
 
             class MockCallback:
                 def __init__(self, message, user):
                     self.message = message
                     self.from_user = user
 
-                async def answer(self, *args, **kwargs):
-                    pass
+                async def answer(self, text=None, show_alert=False):
+                    if text and show_alert:
+                        await self.message.answer(text)
 
             await confirm_media_send(
-                MockCallback(sent_pic, message.from_user), state, bot
+                MockCallback(sent_pic, message.from_user),
+                state,
+                bot,
+                check_cd=False,
             )
             return
 
@@ -607,8 +697,9 @@ async def process_draw_command(message: Message, state: FSMContext, bot: Bot):
     target_id, _, _ = await get_target_and_remind(message, state, bot)
 
     if not target_id:
-        await message.answer(l10n.format_value("error.no_target", lang))
-        return
+        return await message.answer(l10n.format_value("error.no_target", lang))
+
+    # Check privacy
 
     # Check privacy
     target_settings = db.get_user_settings(target_id)
@@ -708,6 +799,76 @@ async def show_draw_customization(
             text_color_input=s["text_color"],
             use_bg=s["use_bg"],
         )
+
+        # CHECK QUICK SEND SETTING
+        user_settings = db.get_user_settings(message.from_user.id)
+        if user_settings.get("skip_confirm_media"):
+            # Check CD before sending preview/confirmation
+            cd_seconds = int(db.get_global_config("message_cooldown", DEFAULT_COOLDOWN))
+            allowed, remain = db.check_and_reserve_cooldown(
+                user_id, s["target_id"], cd_seconds
+            )
+            if not allowed:
+                # Cleanup
+                if "menu_msg_id" in data:
+                    try:
+                        await bot.delete_message(user_id, data["menu_msg_id"])
+                    except:
+                        pass
+                elif "wait_msg" in locals():  # In case wait_msg is still around
+                    try:
+                        await bot.delete_message(
+                            user_id, wait_msg.message_id
+                        )  # wait_msg from caller? But this is inside show_draw...
+                        # Actually show_draw_customization defines wait_msg locally or answers callback
+                    except:
+                        pass
+
+                return await bot.send_message(
+                    user_id, l10n.format_value("error.cooldown", lang, seconds=remain)
+                )
+
+            # Send as sent
+            from handlers.callbacks import confirm_media_send
+
+            # We need to construct a message to act as "sent_pic"
+            # Since generate_image_input returns path...
+            # But wait, show_draw_customization uses "file_path" local var.
+
+            sent_pic = await bot.send_photo(
+                chat_id=user_id,
+                photo=FSInputFile(file_path),
+                caption=l10n.format_value("msg_sent", lang),
+            )
+
+            # Cleanup menu
+            if is_new:
+                await bot.delete_message(user_id, wait_msg.message_id)
+            else:
+                await message.delete()  # Delete old menu if editing
+
+            class MockCallback:
+                def __init__(self, message, user):
+                    self.message = message
+                    self.from_user = user
+
+                async def answer(self, text=None, show_alert=False):
+                    if text and show_alert:
+                        await self.message.answer(text)
+
+            await state.update_data(
+                target_id=s["target_id"],
+                media_path=file_path,
+                media_type="pic",  # treat as pic for sending
+            )
+
+            await confirm_media_send(
+                MockCallback(sent_pic, message.from_user),
+                state,
+                bot,
+                check_cd=False,
+            )
+            return
 
         kb = get_draw_kb(s, lang)
 
@@ -836,10 +997,18 @@ async def process_anonymous_message(
 
             # Create a fake CommandObject
             cmd_obj = CommandObject(prefix="/", command="voice", args=message.text)
-            return await process_voice_command(message, state, bot, cmd_obj)
+            return await process_voice_command(
+                message, state, bot, cmd_obj, check_cd=True
+            )
 
         await forward_anonymous_msg(
-            bot, message, target_id, message.from_user.id, state, album=album
+            bot,
+            message,
+            target_id,
+            message.from_user.id,
+            state,
+            album=album,
+            check_cd=True,
         )
         # Note: We NO LONGER clear the state here to allow continuous writing.
         # State will be cleared on /cancel or when starting a new /start link.
@@ -862,10 +1031,33 @@ async def process_reply(
             reply_to_id=reply_to_id,
             album=album,
             anon_num=anon_num,
+            check_cd=True,
         )
     else:
         # Not a known anonymous link
         pass
+
+
+@router.message(Form.setting_cooldown)
+async def process_setting_cooldown(message: Message, state: FSMContext):
+    from config import ADMIN_ID
+
+    if str(message.from_user.id) != str(ADMIN_ID):
+        await state.clear()
+        return
+
+    lang = await get_lang(message.from_user.id, message)
+    text = message.text.strip()
+
+    if text.isdigit():
+        new_cd = int(text)
+        db.set_global_config("message_cooldown", new_cd)
+        await message.answer(
+            l10n.format_value("admin.cooldown_set", lang, seconds=new_cd)
+        )
+        await state.clear()
+    else:
+        await message.answer("Будь ласка, введіть число (секунди):")
 
 
 @router.message()

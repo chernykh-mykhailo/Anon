@@ -108,9 +108,11 @@
         "unblock_instruction": "❓ Provide ID from the list (e.g.: <code>/unblock 1</code>) or reply to a message.",
         "session_expired": "❌ Error: session expired or data outdated.",
         "data_missing": "❌ Error: data missing.",
-        "regen_failed": "❌ Error regenerating. Try again."
+        "regen_failed": "❌ Error during regeneration. Try again.",
+        "cooldown": "Wait another {seconds}s before writing again ⏳"
     },
     "admin": {
-        "log_activated": "✅ Logs activated for this chat: <code>{chat_id}</code>{thread_info}\n\n<i>Changes saved in .env. Bot now sends reports here.</i>"
+        "log_activated": "✅ Logs activated for this chat: <code>{chat_id}</code>{thread_info}\n\n<i>Changes saved. Reports will be sent here.</i>",
+        "cooldown_set": "Cooldown set to: {seconds} sec. ✅"
     }
 }
