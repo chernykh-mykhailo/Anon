@@ -1,5 +1,5 @@
 import os
-import random
+
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
 from typing import Union, List
@@ -445,22 +445,10 @@ async def process_voice_command(
 
     # Get user settings for default voice character
     user_settings = db.get_user_settings(message.from_user.id)
-    default_gender = user_settings.get("voice_gender", "m")
+    default_gender = user_settings.get("voice_gender", "rnd")
 
-    # Command determines gender: /voice uses default/random, /voice_m explicitly male, etc.
-    bot_info = await bot.get_me()
-    cmd = (
-        message.text.split()[0]
-        .replace("/", "")
-        .lower()
-        .replace(f"@{bot_info.username.lower()}", "")
-    )
-
-    gender_map = {"voice_m": "m", "voice_f": "f", "voice_j": "j"}
-    gender = gender_map.get(cmd, default_gender)
-
-    if gender == "r":
-        gender = random.choice(["m", "f", "j"])
+    # Simplified logic: always use user's selected gender (defaulting to rnd)
+    gender = default_gender
 
     if not text:
         if message.reply_to_message:

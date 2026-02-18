@@ -263,7 +263,7 @@ class Database:
                     "receive_media": 1,
                     "receive_messages": 1,
                     "auto_voice": 0,
-                    "voice_gender": "m",
+                    "voice_gender": "rnd",
                     "skip_confirm_voice": 0,
                     "skip_confirm_media": 0,
                 }

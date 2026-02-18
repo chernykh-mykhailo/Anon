@@ -36,8 +36,8 @@ VOICES = {
     # Anonymous/Robot (modified parameters)
     "r": {
         "voice": "uk-UA-OstapNeural",
-        "pitch": "-15%",
-        "rate": "-10%",
+        "pitch": "-10%",
+        "rate": "-5%",
     },
     # English Voices (Standard)
     "jenny": {"voice": "en-US-JennyNeural", "pitch": "+0Hz", "rate": "+0%"},
@@ -204,6 +204,22 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
                 return FSInputFile(file_path)
             except Exception as e:
                 if attempt == retries - 1:
+                    # If all retries failed, try falling back to a safe default voice (e.g. Dmytro)
+                    # This handles cases where a user-provided custom voice name is invalid or fails.
+                    safe_voice = VOICES["m"]["voice"]
+                    if config["voice"] != safe_voice:
+                        logging.warning(
+                            f"Voice {config['voice']} failed after retries. Falling back to default {safe_voice}. Error: {e}"
+                        )
+                        try:
+                            communicate = edge_tts.Communicate(text, safe_voice)
+                            await communicate.save(file_path)
+                            # Cache the fallback result? Maybe not, as key would be wrong.
+                            return FSInputFile(file_path)
+                        except Exception as fallback_e:
+                            logging.error(f"Fallback voice also failed: {fallback_e}")
+                            pass  # Will raise original error below
+
                     raise e
                 await asyncio.sleep(2**attempt)
 
