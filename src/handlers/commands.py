@@ -392,16 +392,25 @@ async def cmd_report(message: Message, bot: Bot):
     sender_id, _, _, _ = link
     from config import ADMIN_ID, REPORT_CHAT_ID, REPORT_THREAD_ID
 
-    # Clickable profile links
-    spammer_info = f"<a href='tg://user?id={sender_id}'>{sender_id}</a>"
-    reporter_info = (
-        f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.id}</a>"
-    )
+    # Fetch more info for better reporting
+    async def get_user_display(uid):
+        try:
+            c = await bot.get_chat(uid)
+            name = c.full_name
+            link = f"<a href='tg://user?id={uid}'>{name}</a>"
+            if c.username:
+                link += f" (@{c.username})"
+            return link
+        except Exception:
+            return f"<a href='tg://user?id={uid}'>{uid}</a>"
+
+    spammer_display = await get_user_display(sender_id)
+    reporter_display = await get_user_display(message.from_user.id)
 
     report_text = (
         f"🚩 <b>НОВИЙ РЕПОРТ</b>\n\n"
-        f"👤 <b>Хто поскаржився:</b> {reporter_info} (ID: <code>{message.from_user.id}</code>)\n"
-        f"🚫 <b>На кого:</b> {spammer_info} (ID: <code>{sender_id}</code>)\n"
+        f"👤 <b>Хто поскаржився:</b> {reporter_display} (ID: <code>{message.from_user.id}</code>)\n"
+        f"🚫 <b>На кого:</b> {spammer_display} (ID: <code>{sender_id}</code>)\n"
         f"---"
     )
 
