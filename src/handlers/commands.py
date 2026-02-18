@@ -594,7 +594,44 @@ async def voice_command(message: Message, command: CommandObject):
         await message.answer(text, parse_mode="HTML")
         return
 
-    voice = args.strip()
+    voice_input = args.strip()
+    voice = voice_input
+
+    # Check if input is a number (index from /list_voices)
+    if voice_input.isdigit():
+        idx = int(voice_input)
+        try:
+            # We must fetch and sort the same way list_voices does
+            import edge_tts
+
+            all_voices = await edge_tts.list_voices()
+            all_voices.sort(key=lambda x: (x["Locale"], x["ShortName"]))
+
+            if 1 <= idx <= len(all_voices):
+                voice = all_voices[idx - 1]["ShortName"]
+            else:
+                err = (
+                    f"⚠️ Номер {idx} не знайдено. Всього голосів: {len(all_voices)}"
+                    if lang == "uk"
+                    else f"⚠️ Number {idx} not found. Total voices: {len(all_voices)}"
+                )
+                await message.answer(err, parse_mode="HTML")
+                return
+        except Exception as e:
+            await message.answer(f"Error fetching voice list: {e}")
+            return
+
+    # Try to extract voice name if user pasted full line like "fr-FR - fr-FR-DeniseNeural (Gender: Female)"
+    # We look for the part that looks like a voice code (e.g. *-*-*Neural)
+    elif "Neural" in voice_input:
+        # Split by common separators and find the part with "Neural"
+        parts = voice_input.replace(" - ", " ").split()
+        for p in parts:
+            clean_p = p.strip("(),")
+            if "Neural" in clean_p and "-" in clean_p:
+                voice = clean_p
+                break
+
     # Basic validation
     if "Neural" not in voice or "-" not in voice:
         err = (
@@ -630,11 +667,11 @@ async def list_voices_command(message: Message):
         else:
             lines.append("List of available voices (Microsoft Edge TTS):\n")
 
-        for v in voices:
+        for i, v in enumerate(voices, 1):
             try:
-                # Add simplified formatting
+                # Add simplified formatting with index
                 lines.append(
-                    f"{v['Locale']} - {v['ShortName']} (Gender: {v['Gender']})"
+                    f"{i}. {v['ShortName']} (Locale: {v['Locale']}, Gender: {v['Gender']})"
                 )
             except Exception:
                 continue
@@ -644,9 +681,9 @@ async def list_voices_command(message: Message):
 
         file = BufferedInputFile(file_bytes, filename="voices.txt")
         caption = (
-            "Ось повний список голосів. Скопіюйте ShortName і встановіть через /set_voice ShortName"
+            "Ось повний список голосів. Використайте номер: /set_voice 117\nАбо скопіюйте код: /set_voice en-US-GuyNeural"
             if lang == "uk"
-            else "Here is the full list. Copy ShortName and usage /set_voice ShortName"
+            else "Here is the full list. Use number: /set_voice 117\nOr copy code: /set_voice en-US-GuyNeural"
         )
 
         await message.answer_document(document=file, caption=caption)
