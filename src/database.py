@@ -112,6 +112,13 @@ class Database:
                 )
             """)
 
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS global_config (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )
+            """)
+
             # Cooldown tracking table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS cooldowns (
