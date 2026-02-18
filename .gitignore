@@ -17,3 +17,5 @@ docker-compose.override.yml
 # Temporary files
 temp/*
 !.gitkeep
+
+src/temp/*

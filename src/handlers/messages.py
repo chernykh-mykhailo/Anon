@@ -712,7 +712,9 @@ async def process_draw_command(message: Message, state: FSMContext, bot: Bot):
 
     # Case 1: Reply to photo
     # Setup temp dir
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    base_dir = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    )
     temp_dir = os.path.join(base_dir, "temp")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
@@ -813,7 +815,7 @@ async def show_draw_customization(
                 if "menu_msg_id" in data:
                     try:
                         await bot.delete_message(user_id, data["menu_msg_id"])
-                    except:
+                    except Exception:
                         pass
                 elif "wait_msg" in locals():  # In case wait_msg is still around
                     try:
@@ -821,7 +823,7 @@ async def show_draw_customization(
                             user_id, wait_msg.message_id
                         )  # wait_msg from caller? But this is inside show_draw...
                         # Actually show_draw_customization defines wait_msg locally or answers callback
-                    except:
+                    except Exception:
                         pass
 
                 return await bot.send_message(

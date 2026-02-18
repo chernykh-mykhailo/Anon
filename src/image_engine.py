@@ -23,12 +23,12 @@ async def generate_image_input(
 ) -> str:
     """Choose a random template or use custom image and draw text on it."""
     # 1. Setup paths
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    temp_dir = os.path.join(base_dir, "temp")
+    base_src_dir = os.path.dirname(os.path.abspath(__file__))
+    temp_dir = os.path.join(os.path.dirname(base_src_dir), "temp")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)
 
-    templates_dir = os.path.join(base_dir, "assets", "templates", "generated")
+    templates_dir = os.path.join(base_src_dir, "assets", "templates", "generated")
     output_path = os.path.join(temp_dir, f"card_{random.randint(1000, 9999)}.png")
 
     # 2. Pick template or use custom
@@ -47,7 +47,7 @@ async def generate_image_input(
     # 3. Setup Font
     # Priority: 1. Project font, 2. Windows fonts, 3. Linux fonts, 4. Default
     font_paths = [
-        os.path.join(base_dir, "assets", "fonts", "font.ttf"),
+        os.path.join(base_src_dir, "assets", "fonts", "font.ttf"),
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         "C:\\Windows\\Fonts\\arial.ttf",

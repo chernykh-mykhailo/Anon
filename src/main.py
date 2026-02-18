@@ -9,7 +9,9 @@ from middlewares.media_group import MediaGroupMiddleware
 
 def startup_cleanup():
     """Clean up temp directory on startup."""
-    temp_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp")
+    temp_dir = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "temp"
+    )
     if os.path.exists(temp_dir):
         print(f"Cleaning up temp directory: {temp_dir}")
         for f in os.listdir(temp_dir):

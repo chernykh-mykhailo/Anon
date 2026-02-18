@@ -19,7 +19,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Create temp directory
+# Set working directory to source
+WORKDIR /app/src
+
+# Create temp directory inside src (optional, code handles it)
 RUN mkdir -p temp
 
 # Command to run the bot
