@@ -111,7 +111,15 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
         keys = [k for k in VOICES.keys() if k != "rnd"]
         gender = random.choice(keys)
 
-    config = VOICES.get(gender, VOICES["m"])
+    # Check for direct voice code (e.g. en-US-GuyNeural)
+    if gender in VOICES:
+        config = VOICES[gender]
+    elif "-" in gender and "Neural" in gender:
+        # User provided direct voice code
+        config = {"voice": gender, "pitch": "+0Hz", "rate": "+0%"}
+    else:
+        config = VOICES["m"]
+
     text_len = len(text)
 
     # 1. Setup paths

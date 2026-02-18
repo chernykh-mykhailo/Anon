@@ -8,6 +8,8 @@ from aiogram.types import (
     BotCommandScopeDefault,
 )
 from aiogram.fsm.context import FSMContext
+from aiogram.types import BufferedInputFile
+import edge_tts
 
 from l10n import l10n
 from database import db
@@ -574,3 +576,81 @@ async def cmd_settings(message: Message):
     await message.answer(
         l10n.format_value("settings_title", lang), reply_markup=kb, parse_mode="HTML"
     )
+
+
+@router.message(Command("set_voice"))
+async def voice_command(message: Message, command: CommandObject):
+    lang = db.get_user_lang(message.from_user.id)
+    args = command.args
+
+    if not args:
+        # User wants to reset
+        db.update_user_setting(message.from_user.id, "voice_gender", "m")
+        text = (
+            "✅ Голос скинуто до стандартного (Чоловічий)."
+            if lang == "uk"
+            else "✅ Voice reset to standard (Male)."
+        )
+        await message.answer(text, parse_mode="HTML")
+        return
+
+    voice = args.strip()
+    # Basic validation
+    if "Neural" not in voice or "-" not in voice:
+        err = (
+            "⚠️ Некоректна назва голосу. Приклад: <code>en-US-GuyNeural</code>"
+            if lang == "uk"
+            else "⚠️ Invalid voice name. Example: <code>en-US-GuyNeural</code>"
+        )
+        await message.answer(err, parse_mode="HTML")
+        return
+
+    db.update_user_setting(message.from_user.id, "voice_gender", voice)
+    msg = (
+        f"✅ Голос успішно змінено на: <code>{voice}</code>"
+        if lang == "uk"
+        else f"✅ Voice successfully changed to: <code>{voice}</code>"
+    )
+    await message.answer(msg, parse_mode="HTML")
+
+
+@router.message(Command("list_voices"))
+async def list_voices_command(message: Message):
+    lang = db.get_user_lang(message.from_user.id)
+    wait_msg = await message.answer("⏳..." if lang == "uk" else "⏳...")
+
+    try:
+        voices = await edge_tts.list_voices()
+        # Sort by locale, then name
+        voices.sort(key=lambda x: (x["Locale"], x["ShortName"]))
+
+        lines = []
+        if lang == "uk":
+            lines.append("Список доступних голосів (Microsoft Edge TTS):\n")
+        else:
+            lines.append("List of available voices (Microsoft Edge TTS):\n")
+
+        for v in voices:
+            try:
+                # Add simplified formatting
+                lines.append(
+                    f"{v['Locale']} - {v['ShortName']} (Gender: {v['Gender']})"
+                )
+            except Exception:
+                continue
+
+        content = "\n".join(lines)
+        file_bytes = content.encode("utf-8")
+
+        file = BufferedInputFile(file_bytes, filename="voices.txt")
+        caption = (
+            "Ось повний список голосів. Скопіюйте ShortName і встановіть через /set_voice ShortName"
+            if lang == "uk"
+            else "Here is the full list. Copy ShortName and usage /set_voice ShortName"
+        )
+
+        await message.answer_document(document=file, caption=caption)
+    except Exception as e:
+        await message.answer(f"Error: {e}")
+    finally:
+        await wait_msg.delete()
