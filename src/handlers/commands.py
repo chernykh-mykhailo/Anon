@@ -614,7 +614,7 @@ async def voice_command(message: Message, command: CommandObject):
     await message.answer(msg, parse_mode="HTML")
 
 
-@router.message(Command("list_voices"))
+@router.message(Command("list_voices", "voice_list"))
 async def list_voices_command(message: Message):
     lang = db.get_user_lang(message.from_user.id)
     wait_msg = await message.answer("⏳..." if lang == "uk" else "⏳...")

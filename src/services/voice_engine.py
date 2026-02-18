@@ -206,12 +206,20 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
                 if attempt == retries - 1:
                     # If all retries failed, try falling back to a safe default voice (e.g. Dmytro)
                     # This handles cases where a user-provided custom voice name is invalid or fails.
-                    safe_voice = VOICES["m"]["voice"]
-                    if config["voice"] != safe_voice:
+                    safe_voice = "uk-UA-DmytroNeural"
+                    # Try fallback if voice is different OR if using modified pitch/rate (which might be the cause)
+                    should_fallback = (
+                        config["voice"] != safe_voice
+                        or config["pitch"] != "+0Hz"
+                        or config["rate"] != "+0%"
+                    )
+
+                    if should_fallback:
                         logging.warning(
-                            f"Voice {config['voice']} failed after retries. Falling back to default {safe_voice}. Error: {e}"
+                            f"Voice {config['voice']} failed after retries. Falling back to safe {safe_voice}. Error: {e}"
                         )
                         try:
+                            # Use default pitch/rate for safety
                             communicate = edge_tts.Communicate(text, safe_voice)
                             await communicate.save(file_path)
                             # Cache the fallback result? Maybe not, as key would be wrong.
