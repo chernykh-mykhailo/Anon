@@ -37,15 +37,6 @@ async def set_commands(bot):
             command="voice", description=l10n.format_value("commands.voice", "uk")
         ),
         BotCommand(
-            command="voice_m", description=l10n.format_value("commands.voice_m", "uk")
-        ),
-        BotCommand(
-            command="voice_f", description=l10n.format_value("commands.voice_f", "uk")
-        ),
-        BotCommand(
-            command="voice_j", description=l10n.format_value("commands.voice_j", "uk")
-        ),
-        BotCommand(
             command="block", description=l10n.format_value("commands.block", "uk")
         ),
         BotCommand(
@@ -87,15 +78,6 @@ async def set_commands(bot):
         BotCommand(command="pic", description=l10n.format_value("commands.pic", "en")),
         BotCommand(
             command="voice", description=l10n.format_value("commands.voice", "en")
-        ),
-        BotCommand(
-            command="voice_m", description=l10n.format_value("commands.voice_m", "en")
-        ),
-        BotCommand(
-            command="voice_f", description=l10n.format_value("commands.voice_f", "en")
-        ),
-        BotCommand(
-            command="voice_j", description=l10n.format_value("commands.voice_j", "en")
         ),
         BotCommand(
             command="block", description=l10n.format_value("commands.block", "en")
