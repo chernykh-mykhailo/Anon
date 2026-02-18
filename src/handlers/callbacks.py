@@ -51,12 +51,13 @@ async def set_lang(callback: types.CallbackQuery):
 
 
 @router.callback_query(F.data.startswith("write_to_"))
-async def write_to_(callback: types.CallbackQuery, state: FSMContext):
+async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Callback to start a PERSISTENT dialogue."""
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
 
-        # Clear stale data from previous sessions
+        # Clear stale data and set PERSISTENT target
         await state.update_data(
             target_id=target_id,
             target_name=None,
@@ -64,6 +65,26 @@ async def write_to_(callback: types.CallbackQuery, state: FSMContext):
             anon_num=db.get_available_anon_num(target_id, callback.from_user.id),
         )
         await state.set_state(Form.writing_message)
+        await callback.message.answer(
+            l10n.format_value("writing_to", lang), parse_mode="HTML"
+        )
+        await callback.answer()
+    except Exception:
+        await callback.answer()
+
+
+@router.callback_query(F.data.startswith("send_again_"))
+async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
+    """Callback for a ONE-OFF message (Write More). Does NOT start a dialogue."""
+    try:
+        target_id = int(callback.data.split("_")[-1])
+        lang = await get_lang(callback.from_user.id, callback.message)
+
+        # Set temp state data but DO NOT set persistent 'writing_message' state globally?
+        # Actually, we need to prompt for message. Let's use a temporary flag.
+        await state.update_data(temp_target_id=target_id, temp_reply_to_id=None)
+        await state.set_state(Form.writing_message)
+
         await callback.message.answer(
             l10n.format_value("writing_to", lang), parse_mode="HTML"
         )

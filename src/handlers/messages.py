@@ -56,7 +56,16 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
             if link_anon_num:
                 anon_num = link_anon_num
 
-    # 2. Update persistent session if active
+    # 2. Check for temporary "Write More" (one-off)
+    temp_target_id = state_data.get("temp_target_id")
+    if temp_target_id:
+        temp_reply_to_id = state_data.get("temp_reply_to_id")
+        num_to_use = db.get_available_anon_num(temp_target_id, message.from_user.id)
+        # Clear temp target immediately so it doesn't persist
+        await state.update_data(temp_target_id=None, temp_reply_to_id=None)
+        return temp_target_id, temp_reply_to_id, num_to_use
+
+    # 3. Update persistent session if active
     if active_target_id:
         if not anon_num:
             anon_num = db.get_available_anon_num(active_target_id, message.from_user.id)
@@ -636,7 +645,7 @@ async def forward_anonymous_msg(
                     ),
                     InlineKeyboardButton(
                         text=l10n.format_value("button.write_more", sender_lang),
-                        callback_data=f"write_to_{target_id}",
+                        callback_data=f"send_again_{target_id}",
                     ),
                 ]
             ]
