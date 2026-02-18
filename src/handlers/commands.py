@@ -225,7 +225,8 @@ async def cmd_start(
                 )
             except Exception:
                 # Fallback if chat info cannot be fetched
-                anon_num_target = data.get("anon_num") or "№???"
+                state_data = await state.get_data()
+                anon_num_target = state_data.get("anon_num") or "№???"
                 await message.answer(
                     l10n.format_value(
                         "writing_to_user", lang, name=f"<b>{anon_num_target}</b>"
@@ -298,7 +299,7 @@ async def cmd_block(message: Message):
     if not link:
         return await message.answer(l10n.format_value("error.no_reply_target", lang))
 
-    sender_id, _, _ = link
+    sender_id, _, _, _ = link
     db.block_user(
         message.from_user.id,
         sender_id,
@@ -321,7 +322,7 @@ async def cmd_unblock(message: Message, command: CommandObject):
                 l10n.format_value("error.no_sender_found", lang)
             )
 
-        sender_id, _, _ = link
+        sender_id, _, _, _ = link
         if db.unblock_user(message.from_user.id, sender_id):
             return await message.answer(l10n.format_value("user_unblocked", lang))
         else:
@@ -388,7 +389,7 @@ async def cmd_report(message: Message, bot: Bot):
     if not link:
         return await message.answer(l10n.format_value("error.no_sender_found", lang))
 
-    sender_id, _, _ = link
+    sender_id, _, _, _ = link
     from config import ADMIN_ID, REPORT_CHAT_ID, REPORT_THREAD_ID
 
     # Clickable profile links
@@ -427,9 +428,11 @@ async def cmd_report(message: Message, bot: Bot):
 async def cmd_setlog(message: Message):
     from config import ADMIN_ID
 
+    print(f"DEBUG: cmd_setlog called by {message.from_user.id}, ADMIN_ID is {ADMIN_ID}")
+
     # Only admin can use this
     if str(message.from_user.id) != str(ADMIN_ID):
-        return
+        return await message.answer("У вас немає прав 🤡")
 
     chat_id = message.chat.id
     thread_id = message.message_thread_id

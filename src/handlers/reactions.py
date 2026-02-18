@@ -12,7 +12,7 @@ async def on_reaction(reaction: types.MessageReactionUpdated, bot: Bot):
     if not link:
         return
 
-    original_sender_id, original_msg_id, original_chat_id = link
+    original_sender_id, original_msg_id, original_chat_id, _ = link
 
     if reaction.new_reaction:
         emoji = ""
