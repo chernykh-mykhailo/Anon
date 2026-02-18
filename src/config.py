@@ -9,3 +9,5 @@ REPORT_THREAD_ID = int(os.getenv("REPORT_THREAD_ID", 0))
 DB_PATH = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "anon_bot.db"
 )
+AZURE_SPEECH_KEY = os.getenv("AZURE_SPEECH_KEY")
+AZURE_SPEECH_REGION = os.getenv("AZURE_SPEECH_REGION")

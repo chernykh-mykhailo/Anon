@@ -247,6 +247,9 @@ class Database:
             )
             conn.commit()
 
+    def update_user_setting(self, user_id, key, value):
+        self.update_user_settings(user_id, **{key: value})
+
     def get_user_settings(self, user_id):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()

@@ -4,3 +4,4 @@ edge-tts
 Pillow
 aiohttp
 pilmoji
+azure-cognitiveservices-speech
