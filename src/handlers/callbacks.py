@@ -4,8 +4,8 @@ from l10n import l10n
 from database import db
 from states import Form
 from utils import get_lang, get_user_link
-from voice_engine import text_to_voice, cleanup_voice
-from image_engine import generate_image_input, cleanup_image
+from services.voice_engine import text_to_voice, cleanup_voice
+from services.image_engine import generate_image_input, cleanup_image
 
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext

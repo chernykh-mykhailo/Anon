@@ -23,7 +23,7 @@ async def generate_image_input(
 ) -> str:
     """Choose a random template or use custom image and draw text on it."""
     # 1. Setup paths
-    base_src_dir = os.path.dirname(os.path.abspath(__file__))
+    base_src_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     temp_dir = os.path.join(os.path.dirname(base_src_dir), "temp")
     if not os.path.exists(temp_dir):
         os.makedirs(temp_dir)

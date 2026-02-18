@@ -13,7 +13,7 @@ from l10n import l10n
 from database import db
 from states import Form
 from utils import get_lang, get_user_link
-from image_engine import cleanup_image
+from services.image_engine import cleanup_image
 
 router = Router()
 
