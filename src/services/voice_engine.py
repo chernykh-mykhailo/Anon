@@ -265,8 +265,8 @@ async def _apply_anonymization(file_path: str, is_video: bool = False):
         )
 
         # Audio Filter: pitch down ~25% (0.75), fix speed (1/0.75 ~ 1.33)
-        # Using asetrate changes pitch AND speed. atempo restores speed.
-        audio_filter = "asetrate=44100*0.75,atempo=1.33,volume=1.5"
+        # Using aresample ensures the frequency math works for any input (voice/video)
+        audio_filter = "aresample=44100,asetrate=44100*0.75,atempo=1.33,volume=1.5"
 
         args = ["ffmpeg", "-y", "-i", file_path]
 
