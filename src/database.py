@@ -102,6 +102,10 @@ class Database:
                 cursor.execute(
                     "ALTER TABLE user_settings ADD COLUMN skip_confirm_media INTEGER DEFAULT 0"
                 )
+            if "anon_audio" not in settings_columns:
+                cursor.execute(
+                    "ALTER TABLE user_settings ADD COLUMN anon_audio INTEGER DEFAULT 0"
+                )
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
@@ -264,6 +268,7 @@ class Database:
                     "receive_messages": 1,
                     "auto_voice": 0,
                     "voice_gender": "rnd",
+                    "anon_audio": 0,
                     "skip_confirm_voice": 0,
                     "skip_confirm_media": 0,
                 }

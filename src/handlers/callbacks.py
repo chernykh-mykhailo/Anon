@@ -92,6 +92,7 @@ async def toggle_setting(callback: types.CallbackQuery):
         "media": "receive_media",
         "auto_voice": "auto_voice",
         "skip_confirm_voice": "skip_confirm_voice",
+        "anon_audio": "anon_audio",
         "skip_confirm_media": "skip_confirm_media",
     }
     db_column = mapping.get(setting_key)

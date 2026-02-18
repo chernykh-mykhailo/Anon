@@ -116,6 +116,7 @@ async def forward_anonymous_msg(
 
     # CHECK SETTINGS
     target_settings = db.get_user_settings(target_id)
+    sender_settings = db.get_user_settings(sender_id)
     if not target_settings["receive_messages"]:
         return await message.answer(
             l10n.format_value("user_disabled_messages", sender_lang)
@@ -264,7 +265,44 @@ async def forward_anonymous_msg(
     else:
         # For other messages use copy_message or specific methods for spoilers
         try:
-            if message.photo:
+            sent_msg_info = None
+
+            # Anonymization Logic
+            if sender_settings.get("anon_audio", 0) == 1 and (
+                message.voice or message.video_note
+            ):
+                from services.voice_engine import process_user_media, cleanup_voice
+
+                status_msg = await message.answer(
+                    l10n.format_value("voicing_message", sender_lang)
+                )
+                try:
+                    processed_media = await process_user_media(
+                        bot, message, is_video_note=bool(message.video_note)
+                    )
+                    if processed_media:
+                        if message.video_note:
+                            sent_msg_info = await bot.send_video_note(
+                                chat_id=target_id,
+                                video_note=processed_media,
+                                reply_to_message_id=reply_to_id,
+                            )
+                        else:
+                            sent_msg_info = await bot.send_voice(
+                                chat_id=target_id,
+                                voice=processed_media,
+                                reply_to_message_id=reply_to_id,
+                                caption=message.caption,  # Voice messages can technically have captions in recent updates? Or as audio? Safe to pass if None.
+                            )
+                        await cleanup_voice(processed_media)
+                except Exception as e:
+                    print(f"Anonymization error: {e}")
+                finally:
+                    await status_msg.delete()
+
+            if sent_msg_info:
+                pass
+            elif message.photo:
                 sent_msg_info = await bot.send_photo(
                     chat_id=target_id,
                     photo=message.photo[-1].file_id,
@@ -461,8 +499,9 @@ async def process_voice_command(
     )
 
     try:
-        # Generate voice
-        voice_input = await text_to_voice(text, gender)
+        # Generate voice (pass anonymize flag if enabled)
+        anonymize = user_settings.get("anon_audio", 0) == 1
+        voice_input = await text_to_voice(text, gender, anonymize)
 
         # Save to state for confirmation
         await state.update_data(

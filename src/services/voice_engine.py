@@ -105,7 +105,9 @@ async def generate_azure_speech(text: str, voice_config: dict, output_path: str)
         raise Exception(error_msg)
 
 
-async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInputFile:
+async def text_to_voice(
+    text: str, gender: str = "m", anonymize: bool = False, retries: int = 3
+) -> FSInputFile:
     if gender == "rnd":
         # Filter out 'rnd' itself to avoid recursion if it were in keys (it's not but safe)
         keys = [k for k in VOICES.keys() if k != "rnd"]
@@ -135,7 +137,9 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
         os.makedirs(cache_dir)
 
     # 2. Check Cache
-    unique_string = f"{text}_{config['voice']}_{config['pitch']}_{config['rate']}"
+    unique_string = (
+        f"{text}_{config['voice']}_{config['pitch']}_{config['rate']}_{anonymize}"
+    )
     cache_key = hashlib.md5(unique_string.encode("utf-8")).hexdigest()
     cache_path = os.path.join(cache_dir, f"{cache_key}.mp3")
 
@@ -168,6 +172,11 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
     if use_azure:
         try:
             await generate_azure_speech(text, config, file_path)
+
+            # Apply anonymization if requested (Azure also needs it)
+            if anonymize:
+                await _apply_anonymization(file_path, is_video=False)
+
             # If success, increment counter AND cache
             db.increment_global_config(month_key, text_len)
             logging.info(f"Azure TTS success. Used: {text_len} chars")
@@ -194,6 +203,10 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
                     text, config["voice"], pitch=config["pitch"], rate=config["rate"]
                 )
                 await communicate.save(file_path)
+
+                # Apply anonymization if requested
+                if anonymize:
+                    await _apply_anonymization(file_path, is_video=False)
 
                 # Save to cache also for Edge
                 try:
@@ -222,7 +235,17 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
                             # Use default pitch/rate for safety
                             communicate = edge_tts.Communicate(text, safe_voice)
                             await communicate.save(file_path)
-                            # Cache the fallback result? Maybe not, as key would be wrong.
+
+                            # Apply anonymization if requested
+                            if anonymize:
+                                await _apply_anonymization(file_path, is_video=False)
+
+                            # Save to cache also for Edge
+                            try:
+                                shutil.copy(file_path, cache_path)
+                            except Exception as e:
+                                logging.error(f"Failed to save to cache (Edge): {e}")
+
                             return FSInputFile(file_path)
                         except Exception as fallback_e:
                             logging.error(f"Fallback voice also failed: {fallback_e}")
@@ -232,6 +255,101 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
                 await asyncio.sleep(2**attempt)
 
     raise Exception("Failed to generate voice after retries")
+
+
+async def _apply_anonymization(file_path: str, is_video: bool = False):
+    """Applies FFmpeg filters to make voice sound deep/robotic (anonymized)."""
+    try:
+        temp_filtered = (
+            f"{file_path}_filtered.mp3" if not is_video else f"{file_path}_filtered.mp4"
+        )
+
+        # Audio Filter: pitch down ~25% (0.75), fix speed (1/0.75 ~ 1.33)
+        # Using asetrate changes pitch AND speed. atempo restores speed.
+        audio_filter = "asetrate=44100*0.75,atempo=1.33,volume=1.5"
+
+        args = ["ffmpeg", "-y", "-i", file_path]
+
+        if is_video:
+            # Copy video stream, filter audio stream
+            # Map 0:v (video) and 0:a (audio)
+            args.extend(
+                [
+                    "-map",
+                    "0:v",
+                    "-map",
+                    "0:a",
+                    "-c:v",
+                    "copy",
+                    "-af",
+                    audio_filter,
+                    temp_filtered,
+                ]
+            )
+        else:
+            # Audio only
+            args.extend(["-af", audio_filter, temp_filtered])
+
+        process = await asyncio.create_subprocess_exec(
+            *args, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        await process.wait()
+
+        if process.returncode == 0 and os.path.exists(temp_filtered):
+            shutil.move(temp_filtered, file_path)
+            return True
+        else:
+            logging.error("FFmpeg failed to anonymize audio")
+            if os.path.exists(temp_filtered):
+                os.remove(temp_filtered)
+            return False
+
+    except Exception as e:
+        logging.error(f"Failed to apply anonymization filter: {e}")
+        return False
+
+
+async def process_user_media(bot, message, is_video_note: bool = False) -> FSInputFile:
+    """
+    Downloads user voice/video_note, anonymizes it, and returns FSInputFile.
+    """
+    try:
+        # Determine file ID
+        if is_video_note:
+            file_id = message.video_note.file_id
+            ext = ".mp4"
+        else:
+            file_id = message.voice.file_id
+            ext = ".mp3"  # Telegram voice is usually .ogg (Opus) but we allow ffmpeg to detect format
+
+        # Setup paths
+        base_dir = os.path.dirname(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        )
+        temp_dir = os.path.join(base_dir, "temp")
+        if not os.path.exists(temp_dir):
+            os.makedirs(temp_dir)
+
+        file_path = os.path.join(temp_dir, f"{uuid.uuid4()}{ext}")
+
+        # Download
+        await bot.download(file_id, destination=file_path)
+
+        # Anonymize
+        success = await _apply_anonymization(file_path, is_video=is_video_note)
+
+        if success:
+            return FSInputFile(file_path)
+        else:
+            # If failed, return None or raise.
+            # If we return original file, it defeats purpose.
+            # But better to fail safe? No, user expect anonymity.
+            logging.warning("Anonymization failed for user media")
+            return None
+
+    except Exception as e:
+        logging.error(f"Error processing user media: {e}")
+        return None
 
 
 async def cleanup_voice(voice_file: FSInputFile):

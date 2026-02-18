@@ -553,6 +553,12 @@ def get_settings_keyboard(lang, settings):
             ],
             [
                 InlineKeyboardButton(
+                    text=f"{l10n.format_value('settings_anon_audio', lang)} {'✅' if settings['anon_audio'] else '❌'}",
+                    callback_data="set_toggle_anon_audio",
+                )
+            ],
+            [
+                InlineKeyboardButton(
                     text=f"{l10n.format_value('settings_skip_confirm_voice', lang)} {'✅' if settings['skip_confirm_voice'] else '❌'}",
                     callback_data="set_toggle_skip_confirm_voice",
                     style="success" if settings["skip_confirm_voice"] else "danger",
