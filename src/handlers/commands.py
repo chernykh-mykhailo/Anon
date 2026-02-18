@@ -156,6 +156,7 @@ async def cmd_admin(message: Message):
         f"👥 <b>Користувачі:</b>\n"
         f"— Всього: <code>{stats['total_users']}</code>\n"
         f"{langs_info}\n\n"
+        f"🚫 <b>Заблоковано:</b>\n"
         f"— Всього: <code>{stats['total_blocks']}</code>\n\n"
         f"⏱️ <b>Затримка (CD):</b> <code>{current_cd} сек.</code>"
     )
@@ -179,6 +180,10 @@ async def cmd_start(
 ):
     args = command.args if command else None
     lang = await get_lang(message.from_user.id, message)
+
+    # Register new user in settings to track in stats
+    if not db.get_user_lang(message.from_user.id, None):
+        db.set_user_lang(message.from_user.id, lang)
 
     if args:
         # Jump to message deep link: /start show_123
@@ -218,7 +223,6 @@ async def cmd_start(
                 name_link = f'<a href="tg://user?id={target_id}">{name_display}</a>'
 
                 await state.update_data(target_name=target_name)
-                data = await state.get_data()
                 await message.answer(
                     l10n.format_value("writing_to_user", lang, name=name_link),
                     parse_mode="HTML",
