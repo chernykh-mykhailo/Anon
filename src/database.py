@@ -104,7 +104,11 @@ class Database:
                 )
             if "anon_audio" not in settings_columns:
                 cursor.execute(
-                    "ALTER TABLE user_settings ADD COLUMN anon_audio INTEGER DEFAULT 0"
+                    "ALTER TABLE user_settings ADD COLUMN anon_audio INTEGER DEFAULT 1"
+                )
+                # For existing users who got 0 from the previous default, upgrade them
+                cursor.execute(
+                    "UPDATE user_settings SET anon_audio = 1 WHERE anon_audio = 0"
                 )
 
             cursor.execute("""
@@ -268,7 +272,7 @@ class Database:
                     "receive_messages": 1,
                     "auto_voice": 0,
                     "voice_gender": "rnd",
-                    "anon_audio": 0,
+                    "anon_audio": 1,
                     "skip_confirm_voice": 0,
                     "skip_confirm_media": 0,
                 }

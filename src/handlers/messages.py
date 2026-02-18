@@ -268,7 +268,7 @@ async def forward_anonymous_msg(
             sent_msg_info = None
 
             # Anonymization Logic & Preview Flow
-            if sender_settings.get("anon_audio", 0) == 1 and (
+            if sender_settings.get("anon_audio", 1) == 1 and (
                 message.voice or message.video_note or message.video
             ):
                 from services.voice_engine import process_user_media, cleanup_voice
