@@ -666,8 +666,8 @@ async def process_voice_command(
     )
 
     try:
-        # Generate voice (pass anonymize flag if enabled)
-        anonymize = user_settings.get("anon_audio", 0) == 1
+        # Generate voice (Synthesized voices don't need pitch-shifting, so always False)
+        anonymize = False
         voice_input = await text_to_voice(text, gender, anonymize)
 
         # Save to state for confirmation
