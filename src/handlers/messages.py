@@ -1,4 +1,5 @@
 import os
+import logging
 
 from aiogram import Router, F, types, Bot
 from aiogram.filters import Command
@@ -271,7 +272,7 @@ async def forward_anonymous_msg(
             if sender_settings.get("anon_audio", 1) == 1 and (
                 message.voice or message.video_note or message.video
             ):
-                from services.voice_engine import process_user_media, cleanup_voice
+                from services.voice_engine import process_user_media
 
                 status_msg = await message.answer(
                     l10n.format_value("voicing_message", sender_lang)
@@ -353,14 +354,17 @@ async def forward_anonymous_msg(
                                 reply_markup=kb,
                             )
 
-                        await status_msg.delete()
+                        # Let finally handle status_msg deletion
                         return  # STOP HERE, wait for confirmation callback
 
                 except Exception as e:
-                    print(f"Anonymization error: {e}")
+                    logging.error(f"Anonymization error: {e}")
                 finally:
                     if "status_msg" in locals():
-                        await status_msg.delete()
+                        try:
+                            await status_msg.delete()
+                        except Exception:
+                            pass
 
             if sent_msg_info:
                 pass
