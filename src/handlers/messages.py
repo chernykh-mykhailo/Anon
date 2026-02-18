@@ -646,7 +646,7 @@ async def process_voice_command(
 ):
     lang = await get_lang(message.from_user.id, message)
 
-    target_id, reply_to_id, _ = await get_target_and_remind(message, state, bot)
+    target_id, reply_to_id, anon_num = await get_target_and_remind(message, state, bot)
 
     if not target_id:
         return await message.answer(l10n.format_value("error.no_target", lang))
@@ -695,6 +695,7 @@ async def process_voice_command(
             media_type="voice",
             gender=gender,
             prompt=text,  # For voice it's the text
+            anon_num=anon_num,
         )
         await state.set_state(Form.confirming_media)
 
@@ -1188,45 +1189,6 @@ def get_draw_kb(s: dict, lang: str) -> InlineKeyboardMarkup:
     return kb
 
 
-@router.message(Form.writing_message)
-async def process_anonymous_message(
-    message: Message, state: FSMContext, bot: Bot, album: List[Message] = None
-):
-    if (
-        not album
-        and message.text
-        and message.text.startswith("/")
-        and not message.text.startswith("/text")
-    ):
-        await state.clear()
-        return
-    target_id, reply_to_id, _ = await get_target_and_remind(message, state, bot)
-    if target_id:
-        # Check for Auto-Voice setting
-        user_settings = db.get_user_settings(message.from_user.id)
-        if not album and message.text and user_settings.get("auto_voice"):
-            # Trigger voice command logic
-            from aiogram.filters import CommandObject
-
-            # Create a fake CommandObject
-            cmd_obj = CommandObject(prefix="/", command="voice", args=message.text)
-            return await process_voice_command(
-                message, state, bot, cmd_obj, check_cd=True
-            )
-
-        await forward_anonymous_msg(
-            bot,
-            message,
-            target_id,
-            message.from_user.id,
-            state,
-            album=album,
-            check_cd=True,
-        )
-        # Note: We NO LONGER clear the state here to allow continuous writing.
-        # State will be cleared on /cancel or when starting a new /start link.
-
-
 @router.message(F.reply_to_message)
 async def process_reply(
     message: Message, bot: Bot, state: FSMContext, album: List[Message] = None
@@ -1249,6 +1211,57 @@ async def process_reply(
     else:
         # Not a known anonymous link
         pass
+
+
+@router.message(Form.writing_message)
+async def process_anonymous_message(
+    message: Message,
+    state: FSMContext,
+    bot: Bot,
+    album: List[Message] = None,
+    target_id: int = None,
+    reply_to_id: int = None,
+    anon_num: str = None,
+):
+    if (
+        not album
+        and message.text
+        and message.text.startswith("/")
+        and not message.text.startswith("/text")
+    ):
+        await state.clear()
+        return
+
+    # If not already provided (e.g. from process_unknown), find it
+    if not target_id:
+        target_id, r_to_id, a_num = await get_target_and_remind(message, state, bot)
+        reply_to_id = reply_to_id or r_to_id
+        anon_num = anon_num or a_num
+
+    if target_id:
+        # Check for Auto-Voice setting
+        user_settings = db.get_user_settings(message.from_user.id)
+        if not album and message.text and user_settings.get("auto_voice"):
+            # Trigger voice command logic
+            from aiogram.filters import CommandObject
+
+            # Create a fake CommandObject
+            cmd_obj = CommandObject(prefix="/", command="voice", args=message.text)
+            return await process_voice_command(
+                message, state, bot, cmd_obj, check_cd=True
+            )
+
+        await forward_anonymous_msg(
+            bot,
+            message,
+            target_id,
+            message.from_user.id,
+            state,
+            reply_to_id=reply_to_id,
+            anon_num=anon_num,
+            album=album,
+            check_cd=True,
+        )
 
 
 @router.message(Form.setting_cooldown)
@@ -1278,10 +1291,19 @@ async def process_unknown(message: Message, state: FSMContext):
     # Only answer if it's not a reply (replies are handled above)
     # AND only in PRIVATE chats to avoid spamming groups
     if not message.reply_to_message and message.chat.type == "private":
-        target_id, _, _ = await get_target_and_remind(message, state, message.bot)
+        target_id, reply_to_id, anon_num = await get_target_and_remind(
+            message, state, message.bot
+        )
         if target_id:
             # We have a target! Process it as an anonymous message
-            return await process_anonymous_message(message, state, message.bot)
+            return await process_anonymous_message(
+                message,
+                state,
+                message.bot,
+                target_id=target_id,
+                reply_to_id=reply_to_id,
+                anon_num=anon_num,
+            )
 
         lang = await get_lang(message.from_user.id, message)
         await message.answer(l10n.format_value("error.unknown_action", lang))
