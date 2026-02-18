@@ -453,18 +453,32 @@ async def forward_anonymous_msg(
             )
 
             try:
-                await bot.send_message(
+                notify_msg = await bot.send_message(
                     target_id,
                     l10n.format_value(notify_key, target_lang, name=display_name),
                     message_effect_id=effect_id,
                     reply_markup=kb_notify,
                 )
+                db.save_link(
+                    notify_msg.message_id,
+                    target_id,
+                    sender_id,
+                    message.message_id,
+                    message.chat.id,
+                )
             except Exception:
                 # Fallback if effects fail
-                await bot.send_message(
+                notify_msg = await bot.send_message(
                     target_id,
                     l10n.format_value(notify_key, target_lang, name=display_name),
                     reply_markup=kb_notify,
+                )
+                db.save_link(
+                    notify_msg.message_id,
+                    target_id,
+                    sender_id,
+                    message.message_id,
+                    message.chat.id,
                 )
 
             if sent_msg_info:

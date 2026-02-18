@@ -225,18 +225,32 @@ async def confirm_media_send(
     )
 
     try:
-        await bot.send_message(
+        notify_msg = await bot.send_message(
             target_id,
             l10n.format_value(notify_key, target_lang, name=display_name),
             message_effect_id=effect_id,
             reply_markup=kb_notify,
         )
+        db.save_link(
+            notify_msg.message_id,
+            target_id,
+            callback.from_user.id,
+            callback.message.message_id,
+            callback.message.chat.id,
+        )
     except Exception:
         # Fallback
-        await bot.send_message(
+        notify_msg = await bot.send_message(
             target_id,
             l10n.format_value(notify_key, target_lang, name=display_name),
             reply_markup=kb_notify,
+        )
+        db.save_link(
+            notify_msg.message_id,
+            target_id,
+            callback.from_user.id,
+            callback.message.message_id,
+            callback.message.chat.id,
         )
 
     # Send media to target
