@@ -166,54 +166,56 @@ async def forward_anonymous_msg(
     # Default is the anonymous number
     display_name = anon_num or data.get("anon_num") or "№???"
 
-    # REVEAL LOGIC: If the receiver (target_id) started this conversation via a link
-    # they already know the sender's identity. Let's use it if saved in their state.
-    try:
-        target_state_ctx = FSMContext(
-            storage=state.storage,
-            key=StorageKey(bot_id=bot.id, chat_id=target_id, user_id=target_id),
-        )
-        target_data = await target_state_ctx.get_data()
-
-        # If the receiver is currently in a dialogue with this sender and has their name
-        if target_data.get("target_id") == sender_id and target_data.get("target_name"):
-            display_name = target_data.get("target_name")
-    except Exception:
-        pass
-
-    # Message effects
-    effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
-
-    # Start dialogue button for receiver
-    kb_notify = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text=l10n.format_value("button.start_dialogue", target_lang),
-                    callback_data=f"write_to_{sender_id}",
-                )
-            ]
-        ]
-    )
-
-    try:
-        await bot.send_message(
-            target_id,
-            l10n.format_value(notify_key, target_lang, name=display_name),
-            message_effect_id=effect_id,
-            reply_markup=kb_notify,
-        )
-    except Exception:
-        # Fallback if effects fail
-        await bot.send_message(
-            target_id,
-            l10n.format_value(notify_key, target_lang, name=display_name),
-            reply_markup=kb_notify,
-        )
-
     # Copy message with native reply
     poll_id = None
     if message.poll:
+        # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
+        # they already know the sender's identity. Let's use it if saved in their state.
+        try:
+            target_state_ctx = FSMContext(
+                storage=state.storage,
+                key=StorageKey(bot_id=bot.id, chat_id=target_id, user_id=target_id),
+            )
+            target_data = await target_state_ctx.get_data()
+
+            # If the receiver is currently in a dialogue with this sender and has their name
+            if target_data.get("target_id") == sender_id and target_data.get(
+                "target_name"
+            ):
+                display_name = target_data.get("target_name")
+        except Exception:
+            pass
+
+        # Message effects
+        effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
+
+        # Start dialogue button for receiver
+        kb_notify = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.start_dialogue", target_lang),
+                        callback_data=f"write_to_{sender_id}",
+                    )
+                ]
+            ]
+        )
+
+        try:
+            await bot.send_message(
+                target_id,
+                l10n.format_value(notify_key, target_lang, name=display_name),
+                message_effect_id=effect_id,
+                reply_markup=kb_notify,
+            )
+        except Exception:
+            # Fallback if effects fail
+            await bot.send_message(
+                target_id,
+                l10n.format_value(notify_key, target_lang, name=display_name),
+                reply_markup=kb_notify,
+            )
+
         # For polls we use send_poll to get the new poll_id and force non-anonymous to see votes
         # This is the only way to get poll_answer events
         try:
@@ -244,6 +246,53 @@ async def forward_anonymous_msg(
         msg_id = sent_msg.message_id
         poll_id = sent_msg.poll.id
     elif album:
+        # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
+        # they already know the sender's identity. Let's use it if saved in their state.
+        try:
+            target_state_ctx = FSMContext(
+                storage=state.storage,
+                key=StorageKey(bot_id=bot.id, chat_id=target_id, user_id=target_id),
+            )
+            target_data = await target_state_ctx.get_data()
+
+            # If the receiver is currently in a dialogue with this sender and has their name
+            if target_data.get("target_id") == sender_id and target_data.get(
+                "target_name"
+            ):
+                display_name = target_data.get("target_name")
+        except Exception:
+            pass
+
+        # Message effects
+        effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
+
+        # Start dialogue button for receiver
+        kb_notify = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.start_dialogue", target_lang),
+                        callback_data=f"write_to_{sender_id}",
+                    )
+                ]
+            ]
+        )
+
+        try:
+            await bot.send_message(
+                target_id,
+                l10n.format_value(notify_key, target_lang, name=display_name),
+                message_effect_id=effect_id,
+                reply_markup=kb_notify,
+            )
+        except Exception:
+            # Fallback if effects fail
+            await bot.send_message(
+                target_id,
+                l10n.format_value(notify_key, target_lang, name=display_name),
+                reply_markup=kb_notify,
+            )
+
         from aiogram.utils.media_group import MediaGroupBuilder
 
         media_group = MediaGroupBuilder(caption=message.caption)
@@ -365,6 +414,58 @@ async def forward_anonymous_msg(
                             await status_msg.delete()
                         except Exception:
                             pass
+
+            # Send notification ONLY if we didn't return (meaning we are sending now)
+            # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
+            # they already know the sender's identity. Let's use it if saved in their state.
+            try:
+                target_state_ctx = FSMContext(
+                    storage=state.storage,
+                    key=StorageKey(bot_id=bot.id, chat_id=target_id, user_id=target_id),
+                )
+                target_data = await target_state_ctx.get_data()
+
+                # If the receiver is currently in a dialogue with this sender and has their name
+                if target_data.get("target_id") == sender_id and target_data.get(
+                    "target_name"
+                ):
+                    display_name = target_data.get("target_name")
+            except Exception:
+                pass
+
+            # Message effects
+            effect_id = (
+                "5104841245755180586" if not reply_to_id else "5046509860445903448"
+            )
+
+            # Start dialogue button for receiver
+            kb_notify = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=l10n.format_value(
+                                "button.start_dialogue", target_lang
+                            ),
+                            callback_data=f"write_to_{sender_id}",
+                        )
+                    ]
+                ]
+            )
+
+            try:
+                await bot.send_message(
+                    target_id,
+                    l10n.format_value(notify_key, target_lang, name=display_name),
+                    message_effect_id=effect_id,
+                    reply_markup=kb_notify,
+                )
+            except Exception:
+                # Fallback if effects fail
+                await bot.send_message(
+                    target_id,
+                    l10n.format_value(notify_key, target_lang, name=display_name),
+                    reply_markup=kb_notify,
+                )
 
             if sent_msg_info:
                 pass

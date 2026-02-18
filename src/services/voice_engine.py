@@ -265,9 +265,9 @@ async def _apply_anonymization(file_path: str, is_video: bool = False):
             f"{file_path}_filtered.mp3" if not is_video else f"{file_path}_filtered.mp4"
         )
 
-        # Audio Filter: pitch down ~25% (0.75), fix speed (1/0.75 ~ 1.33)
+        # Audio Filter: pitch down ~20% (0.8), fix speed (1/0.8 = 1.25)
         # Using aresample ensures the frequency math works for any input (voice/video)
-        audio_filter = "aresample=44100,asetrate=44100*0.75,atempo=1.33,volume=1.5"
+        audio_filter = "aresample=44100,asetrate=44100*0.8,atempo=1.25,volume=1.5"
 
         args = ["ffmpeg", "-y", "-i", file_path]
 
