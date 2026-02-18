@@ -36,7 +36,7 @@ VOICES = {
     # Anonymous/Robot (modified parameters)
     "r": {
         "voice": "uk-UA-OstapNeural",
-        "pitch": "-10%",
+        "pitch": "-20Hz",
         "rate": "-5%",
     },
     # English Voices (Standard)
@@ -206,7 +206,7 @@ async def text_to_voice(text: str, gender: str = "m", retries: int = 3) -> FSInp
                 if attempt == retries - 1:
                     # If all retries failed, try falling back to a safe default voice (e.g. Dmytro)
                     # This handles cases where a user-provided custom voice name is invalid or fails.
-                    safe_voice = "uk-UA-DmytroNeural"
+                    safe_voice = "uk-UA-OstapNeural"
                     # Try fallback if voice is different OR if using modified pitch/rate (which might be the cause)
                     should_fallback = (
                         config["voice"] != safe_voice
