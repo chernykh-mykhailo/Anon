@@ -23,6 +23,7 @@ class Database:
                     sender_id INTEGER,
                     sender_msg_id INTEGER,
                     sender_chat_id INTEGER,
+                    anon_num TEXT,
                     poll_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (receiver_msg_id, receiver_chat_id)
@@ -51,6 +52,8 @@ class Database:
                 cursor.execute(
                     "UPDATE message_links SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"
                 )
+            if "anon_num" not in columns:
+                cursor.execute("ALTER TABLE message_links ADD COLUMN anon_num TEXT")
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS user_blocks (
@@ -147,20 +150,22 @@ class Database:
         sender_id,
         sender_msg_id,
         sender_chat_id,
+        anon_num=None,
         poll_id=None,
     ):
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """INSERT OR REPLACE INTO message_links 
-                   (receiver_msg_id, receiver_chat_id, sender_id, sender_msg_id, sender_chat_id, poll_id, created_at) 
-                   VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                   (receiver_msg_id, receiver_chat_id, sender_id, sender_msg_id, sender_chat_id, anon_num, poll_id, created_at) 
+                   VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
                 (
                     receiver_msg_id,
                     receiver_chat_id,
                     sender_id,
                     sender_msg_id,
                     sender_chat_id,
+                    anon_num,
                     poll_id,
                 ),
             )
@@ -170,7 +175,7 @@ class Database:
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT sender_id, sender_msg_id, sender_chat_id FROM message_links WHERE receiver_msg_id = ? AND receiver_chat_id = ?",
+                "SELECT sender_id, sender_msg_id, sender_chat_id, anon_num FROM message_links WHERE receiver_msg_id = ? AND receiver_chat_id = ?",
                 (msg_id, chat_id),
             )
             return cursor.fetchone()
@@ -377,19 +382,27 @@ class Database:
                 SELECT anon_num FROM active_sessions 
                 WHERE (user_a = ? OR user_b = ?) 
                 AND NOT (user_a = ? AND user_b = ?)
-                AND updated_at > datetime('now', '-24 hours')
+                AND updated_at > datetime('now', '-30 days')
                 """,
                 (target_id, target_id, u1, u2),
             )
             taken_nums = {row[0] for row in cursor.fetchall()}
 
-            pool = [f"№{i:03d}" for i in range(1, 457)]
-            available = [n for n in pool if n not in taken_nums]
+            # Tiered pools
+            pool_primary = [f"№{i:03d}" for i in range(1, 457)]
+            pool_secondary = [f"№{i:03d}" for i in range(457, 1000)]
 
-            if not available:
-                picked = f"№{random.randint(1, 456):03d}"
+            available_primary = [n for n in pool_primary if n not in taken_nums]
+
+            if available_primary:
+                picked = random.choice(available_primary)
             else:
-                picked = random.choice(available)
+                available_secondary = [n for n in pool_secondary if n not in taken_nums]
+                if available_secondary:
+                    picked = random.choice(available_secondary)
+                else:
+                    # If somehow 1000 numbers are taken (unlikely for 30d inactive), random high number
+                    picked = f"№{random.randint(1000, 9999):03d}"
 
         self.update_session(sender_id, target_id, picked)
         return picked

@@ -74,11 +74,6 @@ async def write_to_(callback: types.CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "stop_writing")
 async def stop_writing_callback(callback: types.CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    target_id = data.get("target_id")
-    if target_id:
-        db.delete_session(callback.from_user.id, target_id)
-
     await state.clear()
     lang = await get_lang(callback.from_user.id, callback.message)
     await callback.message.answer(l10n.format_value("action_cancelled", lang))
@@ -383,7 +378,6 @@ async def confirm_original_send(
     reply_to_id = data.get("reply_to_id")
     orig_msg_id = data.get("original_message_id")
     media_path = data.get("media_path")
-    media_type = data.get("media_type")
     lang = db.get_user_lang(callback.from_user.id)
 
     if not target_id or not orig_msg_id:

@@ -42,18 +42,19 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
             message.reply_to_message.message_id, message.chat.id
         )
         if link:
-            reply_target_id, reply_to_id, _ = link
+            reply_target_id, reply_to_id, _, link_anon_num = link
 
             # If it's a reply to someone ELSE than our active session, it's a one-off
             if reply_target_id != active_target_id:
-                # We need a number even for one-off replies
-                anon_num_oneoff = db.get_available_anon_num(
+                # Use the number from the message itself if found, otherwise get persistent one
+                num_to_use = link_anon_num or db.get_available_anon_num(
                     reply_target_id, message.from_user.id
                 )
-                return reply_target_id, reply_to_id, anon_num_oneoff
+                return reply_target_id, reply_to_id, num_to_use
 
-            # If it's a reply to the CURRENT active session, continue
-            # (fall through to update state below)
+            # If it's a reply to the CURRENT active session, use the message's number if possible
+            if link_anon_num:
+                anon_num = link_anon_num
 
     # 2. Update persistent session if active
     if active_target_id:
@@ -602,6 +603,7 @@ async def forward_anonymous_msg(
         sender_id,
         message.message_id,
         message.chat.id,
+        anon_num=display_name,
         poll_id=poll_id,
     )
 
@@ -624,14 +626,18 @@ async def forward_anonymous_msg(
     if in_dialogue:
         reply_markup = kb
     else:
-        # Even if not in dialogue, show a button to start it
+        # Even if not in dialogue, show buttons to start it or write more
         reply_markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
+                        text=l10n.format_value("button.start_dialogue", sender_lang),
+                        callback_data=f"write_to_{target_id}",
+                    ),
+                    InlineKeyboardButton(
                         text=l10n.format_value("button.write_more", sender_lang),
                         callback_data=f"write_to_{target_id}",
-                    )
+                    ),
                 ]
             ]
         )
