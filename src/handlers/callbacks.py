@@ -146,8 +146,8 @@ async def confirm_media_cancel(callback: types.CallbackQuery, state: FSMContext)
     media_type = data.get("media_type")
 
     if media_path:
-        if media_type == "voice":
-            cleanup_voice(media_path)
+        if media_type in ["voice", "video_note", "video"]:
+            await cleanup_voice(media_path)
         else:
             cleanup_image(media_path)
 
@@ -246,7 +246,22 @@ async def confirm_media_send(
             voice=FSInputFile(media_path),
             reply_to_message_id=reply_to_id,
         )
-        cleanup_voice(media_path)
+        await cleanup_voice(media_path)
+    elif media_type == "video_note":
+        sent_msg = await bot.send_video_note(
+            chat_id=target_id,
+            video_note=FSInputFile(media_path),
+            reply_to_message_id=reply_to_id,
+        )
+        await cleanup_voice(media_path)
+    elif media_type == "video":
+        sent_msg = await bot.send_video(
+            chat_id=target_id,
+            video=FSInputFile(media_path),
+            reply_to_message_id=reply_to_id,
+            has_spoiler=True,
+        )
+        await cleanup_voice(media_path)
     else:
         sent_msg = await bot.send_photo(
             chat_id=target_id,
@@ -332,9 +347,120 @@ async def confirm_media_send(
     if in_dialogue:
         await state.set_state(Form.writing_message)
     else:
-        # If it was a one-off from confirming_media, clear state but don't clear target data?
-        # Actually, let's just clear it to be safe
-        await state.clear()
+        # Keep dialogue info for "Write More" but clear ephemeral confirmation
+        await state.update_data(media_path=None, media_type=None)
+
+    await callback.answer()
+
+
+@router.callback_query(Form.confirming_media, F.data == "confirm_original_send")
+async def confirm_original_send(
+    callback: types.CallbackQuery, state: FSMContext, bot: Bot
+):
+    data = await state.get_data()
+    target_id = data.get("target_id")
+    reply_to_id = data.get("reply_to_id")
+    orig_msg_id = data.get("original_message_id")
+    media_path = data.get("media_path")
+    media_type = data.get("media_type")
+    lang = db.get_user_lang(callback.from_user.id)
+
+    if not target_id or not orig_msg_id:
+        await callback.answer(
+            l10n.format_value("error.data_missing", lang), show_alert=True
+        )
+        return
+
+    target_lang = await get_lang(target_id)
+
+    # COOLDOWN CHECK
+    cd_seconds = int(db.get_global_config("message_cooldown", "0"))
+    allowed, remain = db.check_and_reserve_cooldown(
+        callback.from_user.id, target_id, cd_seconds
+    )
+    if not allowed:
+        return await callback.answer(
+            l10n.format_value("error.cooldown", lang, seconds=remain),
+            show_alert=True,
+        )
+
+    # Notify target
+    notify_key = "reply_received" if reply_to_id else "new_anonymous_msg"
+    display_name = data.get("anon_num") or "№???"
+
+    kb_notify = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=l10n.format_value("button.start_dialogue", target_lang),
+                    callback_data=f"write_to_{callback.from_user.id}",
+                )
+            ]
+        ]
+    )
+
+    try:
+        await bot.send_message(
+            target_id,
+            l10n.format_value(notify_key, target_lang, name=display_name),
+            reply_markup=kb_notify,
+        )
+    except Exception:
+        pass
+
+    # Copy original message to target
+    sent_msg = await bot.copy_message(
+        chat_id=target_id,
+        from_chat_id=callback.message.chat.id,
+        message_id=orig_msg_id,
+        reply_to_message_id=reply_to_id,
+    )
+
+    # Cleanup the anonymized preview file since it won't be used
+    if media_path:
+        await cleanup_voice(media_path)
+
+    # Save link
+    db.save_link(
+        sent_msg.message_id,
+        target_id,
+        callback.from_user.id,
+        callback.message.message_id,
+        callback.message.chat.id,
+    )
+
+    # Response to sender
+    await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
+
+    in_dialogue = data.get("target_id") == target_id
+    saved_name = data.get("target_name")
+    target_name_to_show = (
+        saved_name if (in_dialogue and saved_name) else (data.get("anon_num") or "№???")
+    )
+
+    sent_text = l10n.format_value("msg_sent_to", lang, name=target_name_to_show)
+
+    kb_done = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=l10n.format_value("button.write_more", lang),
+                    callback_data=f"write_to_{target_id}",
+                )
+            ]
+        ]
+    )
+
+    try:
+        await callback.message.edit_caption(caption=sent_text, reply_markup=kb_done)
+    except Exception:
+        await callback.message.answer(sent_text, reply_markup=kb_done)
+
+    if in_dialogue:
+        await state.set_state(Form.writing_message)
+    else:
+        await state.update_data(media_path=None, media_type=None)
+
     await callback.answer()
 
 

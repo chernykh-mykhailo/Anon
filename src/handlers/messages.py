@@ -267,9 +267,9 @@ async def forward_anonymous_msg(
         try:
             sent_msg_info = None
 
-            # Anonymization Logic
+            # Anonymization Logic & Preview Flow
             if sender_settings.get("anon_audio", 0) == 1 and (
-                message.voice or message.video_note
+                message.voice or message.video_note or message.video
             ):
                 from services.voice_engine import process_user_media, cleanup_voice
 
@@ -277,28 +277,90 @@ async def forward_anonymous_msg(
                     l10n.format_value("voicing_message", sender_lang)
                 )
                 try:
+                    m_type = "voice"
+                    if message.video_note:
+                        m_type = "video_note"
+                    elif message.video:
+                        m_type = "video"
+
                     processed_media = await process_user_media(
-                        bot, message, is_video_note=bool(message.video_note)
+                        bot, message, media_type=m_type
                     )
+
                     if processed_media:
-                        if message.video_note:
-                            sent_msg_info = await bot.send_video_note(
-                                chat_id=target_id,
+                        # Setup Confirmation Keyboard
+                        kb = InlineKeyboardMarkup(
+                            inline_keyboard=[
+                                [
+                                    InlineKeyboardButton(
+                                        text=l10n.format_value(
+                                            "button.confirm_send", sender_lang
+                                        ),
+                                        callback_data="confirm_media_send",
+                                    ),
+                                    InlineKeyboardButton(
+                                        text=l10n.format_value(
+                                            "button.confirm_cancel", sender_lang
+                                        ),
+                                        callback_data="confirm_media_cancel",
+                                    ),
+                                ],
+                                [
+                                    InlineKeyboardButton(
+                                        text=l10n.format_value(
+                                            "button.send_original", sender_lang
+                                        ),
+                                        callback_data="confirm_original_send",
+                                    ),
+                                ],
+                            ]
+                        )
+
+                        # Save to state for confirmation handler
+                        # Reuse common media confirmation state
+                        await state.set_state(Form.confirming_media)
+                        await state.update_data(
+                            media_path=processed_media.path,
+                            media_type=m_type,
+                            target_id=target_id,
+                            reply_to_id=reply_to_id,
+                            anon_num=anon_num or display_name,
+                            original_message_id=message.message_id,
+                        )
+
+                        # Send preview to SENDER
+                        preview_text = l10n.format_value(
+                            "your_voice_preview", sender_lang
+                        )
+                        if m_type == "video_note":
+                            await bot.send_video_note(
+                                chat_id=sender_id,
                                 video_note=processed_media,
-                                reply_to_message_id=reply_to_id,
+                                reply_markup=kb,
+                            )
+                        elif m_type == "video":
+                            await bot.send_video(
+                                chat_id=sender_id,
+                                video=processed_media,
+                                caption=preview_text,
+                                reply_markup=kb,
                             )
                         else:
-                            sent_msg_info = await bot.send_voice(
-                                chat_id=target_id,
+                            await bot.send_voice(
+                                chat_id=sender_id,
                                 voice=processed_media,
-                                reply_to_message_id=reply_to_id,
-                                caption=message.caption,  # Voice messages can technically have captions in recent updates? Or as audio? Safe to pass if None.
+                                caption=preview_text,
+                                reply_markup=kb,
                             )
-                        await cleanup_voice(processed_media)
+
+                        await status_msg.delete()
+                        return  # STOP HERE, wait for confirmation callback
+
                 except Exception as e:
                     print(f"Anonymization error: {e}")
                 finally:
-                    await status_msg.delete()
+                    if "status_msg" in locals():
+                        await status_msg.delete()
 
             if sent_msg_info:
                 pass

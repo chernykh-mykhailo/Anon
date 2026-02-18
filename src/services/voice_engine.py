@@ -7,6 +7,7 @@ import random
 import hashlib
 import shutil
 from datetime import datetime
+from typing import Union
 from aiogram.types import FSInputFile
 
 try:
@@ -309,18 +310,24 @@ async def _apply_anonymization(file_path: str, is_video: bool = False):
         return False
 
 
-async def process_user_media(bot, message, is_video_note: bool = False) -> FSInputFile:
+async def process_user_media(bot, message, media_type: str = "voice") -> FSInputFile:
     """
-    Downloads user voice/video_note, anonymizes it, and returns FSInputFile.
+    Downloads user voice/video_note/video, anonymizes it, and returns FSInputFile.
     """
     try:
         # Determine file ID
-        if is_video_note:
+        if media_type == "video_note":
             file_id = message.video_note.file_id
             ext = ".mp4"
+            is_video = True
+        elif media_type == "video":
+            file_id = message.video.file_id
+            ext = ".mp4"
+            is_video = True
         else:
             file_id = message.voice.file_id
-            ext = ".mp3"  # Telegram voice is usually .ogg (Opus) but we allow ffmpeg to detect format
+            ext = ".mp3"
+            is_video = False
 
         # Setup paths
         base_dir = os.path.dirname(
@@ -336,7 +343,7 @@ async def process_user_media(bot, message, is_video_note: bool = False) -> FSInp
         await bot.download(file_id, destination=file_path)
 
         # Anonymize
-        success = await _apply_anonymization(file_path, is_video=is_video_note)
+        success = await _apply_anonymization(file_path, is_video=is_video)
 
         if success:
             return FSInputFile(file_path)
@@ -352,11 +359,16 @@ async def process_user_media(bot, message, is_video_note: bool = False) -> FSInp
         return None
 
 
-async def cleanup_voice(voice_file: FSInputFile):
-    if not voice_file or not voice_file.path:
+async def cleanup_voice(voice_file: Union[FSInputFile, str]):
+    if not voice_file:
         return
+
+    path = voice_file.path if hasattr(voice_file, "path") else voice_file
+    if not path or not isinstance(path, str):
+        return
+
     try:
-        if os.path.exists(voice_file.path):
-            os.remove(voice_file.path)
+        if os.path.exists(path):
+            os.remove(path)
     except Exception as e:
         logging.warning(f"Failed to cleanup voice file: {e}")
