@@ -188,17 +188,36 @@ async def forward_anonymous_msg(
         # Message effects
         effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
 
-        # Start dialogue button for receiver
-        kb_notify = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=l10n.format_value("button.start_dialogue", target_lang),
-                        callback_data=f"write_to_{sender_id}",
-                    )
+        # Determine if we show dialogue button
+        is_target_in_dialogue = target_data.get("target_id") == sender_id
+
+        # Start dialogue button for receiver (only if not already in dialogue)
+        kb_notify = None
+        if not is_target_in_dialogue:
+            kb_notify = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=l10n.format_value(
+                                "button.start_dialogue", target_lang
+                            ),
+                            callback_data=f"write_to_{sender_id}",
+                        )
+                    ]
                 ]
-            ]
-        )
+            )
+        else:
+            # Optionally show a button to end dialogue even from notification
+            kb_notify = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=l10n.format_value("button.stop_writing", target_lang),
+                            callback_data="stop_writing",
+                        )
+                    ]
+                ]
+            )
 
         try:
             await bot.send_message(
@@ -263,17 +282,35 @@ async def forward_anonymous_msg(
         # Message effects
         effect_id = "5104841245755180586" if not reply_to_id else "5046509860445903448"
 
-        # Start dialogue button for receiver
-        kb_notify = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text=l10n.format_value("button.start_dialogue", target_lang),
-                        callback_data=f"write_to_{sender_id}",
-                    )
+        # Determine if we show dialogue button
+        is_target_in_dialogue = target_data.get("target_id") == sender_id
+
+        # Start dialogue button for receiver (only if not already in dialogue)
+        kb_notify = None
+        if not is_target_in_dialogue:
+            kb_notify = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=l10n.format_value(
+                                "button.start_dialogue", target_lang
+                            ),
+                            callback_data=f"write_to_{sender_id}",
+                        )
+                    ]
                 ]
-            ]
-        )
+            )
+        else:
+            kb_notify = InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text=l10n.format_value("button.stop_writing", target_lang),
+                            callback_data="stop_writing",
+                        )
+                    ]
+                ]
+            )
 
         try:
             await bot.send_message(
@@ -437,19 +474,37 @@ async def forward_anonymous_msg(
                 "5104841245755180586" if not reply_to_id else "5046509860445903448"
             )
 
-            # Start dialogue button for receiver
-            kb_notify = InlineKeyboardMarkup(
-                inline_keyboard=[
-                    [
-                        InlineKeyboardButton(
-                            text=l10n.format_value(
-                                "button.start_dialogue", target_lang
-                            ),
-                            callback_data=f"write_to_{sender_id}",
-                        )
+            # Determine if we show dialogue button
+            is_target_in_dialogue = target_data.get("target_id") == sender_id
+
+            # Start dialogue button for receiver (only if not already in dialogue)
+            kb_notify = None
+            if not is_target_in_dialogue:
+                kb_notify = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=l10n.format_value(
+                                    "button.start_dialogue", target_lang
+                                ),
+                                callback_data=f"write_to_{sender_id}",
+                            )
+                        ]
                     ]
-                ]
-            )
+                )
+            else:
+                kb_notify = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=l10n.format_value(
+                                    "button.stop_writing", target_lang
+                                ),
+                                callback_data="stop_writing",
+                            )
+                        ]
+                    ]
+                )
 
             try:
                 notify_msg = await bot.send_message(
@@ -592,6 +647,10 @@ async def forward_anonymous_msg(
         target_name_to_show = saved_name
     else:
         target_name_to_show = display_name or "№???"
+
+    # Clear reply_to_id after success to prevent leakage
+    if not in_dialogue:
+        await state.update_data(reply_to_id=None)
 
     sent_text = l10n.format_value("msg_sent_to", sender_lang, name=target_name_to_show)
 

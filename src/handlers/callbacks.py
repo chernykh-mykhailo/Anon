@@ -55,8 +55,12 @@ async def write_to_(callback: types.CallbackQuery, state: FSMContext):
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
+
+        # Clear stale data from previous sessions
         await state.update_data(
             target_id=target_id,
+            target_name=None,
+            reply_to_id=None,
             anon_num=db.get_available_anon_num(target_id, callback.from_user.id),
         )
         await state.set_state(Form.writing_message)

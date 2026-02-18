@@ -223,6 +223,7 @@ async def cmd_start(
 
             await state.update_data(
                 target_id=target_id,
+                reply_to_id=None,
                 anon_num=db.get_available_anon_num(target_id, message.from_user.id),
             )
             await state.set_state(Form.writing_message)
