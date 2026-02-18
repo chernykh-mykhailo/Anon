@@ -120,8 +120,7 @@ async def cycle_voice(callback: types.CallbackQuery):
     settings = db.get_user_settings(callback.from_user.id)
     current = settings.get("voice_gender", "m")
 
-    # m -> f -> j -> r -> m
-    voices = ["m", "f", "j", "r"]
+    voices = ["m", "f", "j", "r", "jenny", "ryan", "ava", "andrew", "rnd"]
     try:
         idx = voices.index(current)
         next_voice = voices[(idx + 1) % len(voices)]

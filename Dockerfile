@@ -13,6 +13,11 @@ RUN apt-get update && apt-get install -y \
     fonts-dejavu-core \
     fonts-liberation \
     fonts-freefont-ttf \
+    libssl-dev \
+    libasound2 \
+    wget \
+    build-essential \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 RUN pip install --no-cache-dir -r requirements.txt
 

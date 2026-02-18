@@ -2,10 +2,11 @@ import sqlite3
 import random
 import os
 import time
+from config import DB_PATH
 
 
 class Database:
-    def __init__(self, db_path="data/anon_bot.db"):
+    def __init__(self, db_path=DB_PATH):
         # Ensure the directory exists to avoid Docker volume mounting issues
         os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self.db_path = db_path
@@ -449,6 +450,20 @@ class Database:
             if res and res[0]:
                 return int(res[0])
             return 0
+
+    def increment_global_config(self, key, amount: int):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT value FROM global_config WHERE key = ?", (key,))
+            res = cursor.fetchone()
+            current = int(res[0]) if res and res[0] else 0
+            new_val = current + amount
+            cursor.execute(
+                "INSERT OR REPLACE INTO global_config (key, value) VALUES (?, ?)",
+                (key, str(new_val)),
+            )
+            conn.commit()
+            return new_val
 
 
 db = Database()
