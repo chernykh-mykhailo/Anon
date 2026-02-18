@@ -65,8 +65,22 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
             anon_num=db.get_available_anon_num(target_id, callback.from_user.id),
         )
         await state.set_state(Form.writing_message)
+
+        kb_stop = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.stop_writing", lang),
+                        callback_data="stop_writing",
+                    )
+                ]
+            ]
+        )
+
         await callback.message.answer(
-            l10n.format_value("writing_to", lang), parse_mode="HTML"
+            l10n.format_value("writing_to", lang),
+            parse_mode="HTML",
+            reply_markup=kb_stop,
         )
         await callback.answer()
     except Exception:
@@ -85,8 +99,21 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
         await state.update_data(temp_target_id=target_id, temp_reply_to_id=None)
         await state.set_state(Form.writing_message)
 
+        kb_stop = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.stop_writing", lang),
+                        callback_data="stop_writing",
+                    )
+                ]
+            ]
+        )
+
         await callback.message.answer(
-            l10n.format_value("writing_to", lang), parse_mode="HTML"
+            l10n.format_value("writing_to", lang),
+            parse_mode="HTML",
+            reply_markup=kb_stop,
         )
         await callback.answer()
     except Exception:

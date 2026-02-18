@@ -222,20 +222,43 @@ async def cmd_start(
                 name_display = f"{full_name} (@{username})" if username else full_name
                 name_link = f'<a href="tg://user?id={target_id}">{name_display}</a>'
 
+                kb_stop = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=l10n.format_value("button.stop_writing", lang),
+                                callback_data="stop_writing",
+                            )
+                        ]
+                    ]
+                )
+
                 await state.update_data(target_name=target_name)
                 await message.answer(
                     l10n.format_value("writing_to_user", lang, name=name_link),
                     parse_mode="HTML",
+                    reply_markup=kb_stop,
                 )
             except Exception:
                 # Fallback if chat info cannot be fetched
                 state_data = await state.get_data()
                 anon_num_target = state_data.get("anon_num") or "№???"
+                kb_stop = InlineKeyboardMarkup(
+                    inline_keyboard=[
+                        [
+                            InlineKeyboardButton(
+                                text=l10n.format_value("button.stop_writing", lang),
+                                callback_data="stop_writing",
+                            )
+                        ]
+                    ]
+                )
                 await message.answer(
                     l10n.format_value(
                         "writing_to_user", lang, name=f"<b>{anon_num_target}</b>"
                     ),
                     parse_mode="HTML",
+                    reply_markup=kb_stop,
                 )
         except ValueError:
             await message.answer(l10n.format_value("error.invalid_link", lang))

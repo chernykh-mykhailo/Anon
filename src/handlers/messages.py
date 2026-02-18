@@ -1,17 +1,17 @@
 import os
 import logging
 
-from aiogram import Router, F, types, Bot
-from aiogram.filters import Command
-from typing import Union, List
+from aiogram import Router, Bot, types, F
 from aiogram.types import (
     Message,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     FSInputFile,
+    ReactionTypeEmoji,
 )
+from aiogram.filters import Command
+from typing import Union, List
 from aiogram.fsm.context import FSMContext
-
 from aiogram.fsm.storage.base import StorageKey
 from l10n import l10n
 from database import db
@@ -33,8 +33,8 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
     """
     state_data = await state.get_data()
     active_target_id = state_data.get("target_id")
-    reply_to_id = state_data.get("reply_to_id")
     anon_num = state_data.get("anon_num")
+    reply_to_id = None  # Reset for each message unless manual reply detected
 
     # 1. Reply to an anonymous message (one-off forward priority)
     if message.reply_to_message:
@@ -72,9 +72,7 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
         else:
             db.update_session(message.from_user.id, active_target_id)
 
-        await state.update_data(
-            target_id=active_target_id, reply_to_id=reply_to_id, anon_num=anon_num
-        )
+        await state.update_data(target_id=active_target_id, anon_num=anon_num)
         await state.set_state(Form.writing_message)
         return active_target_id, reply_to_id, anon_num
 
@@ -696,15 +694,12 @@ async def forward_anonymous_msg(
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(message.chat.id, state, bot)
 
-    # Clear reply_to_id after success to prevent leakage
-    if not in_dialogue:
-        await state.update_data(reply_to_id=None)
+    # Clear reply_to_id after success to prevent it sticking in dialogue
+    await state.update_data(reply_to_id=None)
 
     # If in dialogue, use a seamless reaction instead of a confirmation message
     if in_dialogue:
         try:
-            from aiogram.types import ReactionTypeEmoji
-
             await message.react(reactions=[ReactionTypeEmoji(emoji="✅")])
             return  # Don't send a text message
         except Exception:
