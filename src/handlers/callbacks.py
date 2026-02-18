@@ -195,6 +195,9 @@ async def confirm_media_send(
     data = await state.get_data()
     display_name = data.get("anon_num") or "№???"
 
+    # Receiver notification name
+    receiver_display_name = display_name
+
     # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
     try:
         target_state_ctx = FSMContext(
@@ -205,7 +208,7 @@ async def confirm_media_send(
         if target_data.get("target_id") == callback.from_user.id and target_data.get(
             "target_name"
         ):
-            display_name = target_data.get("target_name")
+            receiver_display_name = target_data.get("target_name")
     except Exception:
         pass
 
@@ -227,7 +230,7 @@ async def confirm_media_send(
     try:
         notify_msg = await bot.send_message(
             target_id,
-            l10n.format_value(notify_key, target_lang, name=display_name),
+            l10n.format_value(notify_key, target_lang, name=receiver_display_name),
             message_effect_id=effect_id,
             reply_markup=kb_notify,
         )
@@ -242,7 +245,7 @@ async def confirm_media_send(
         # Fallback
         notify_msg = await bot.send_message(
             target_id,
-            l10n.format_value(notify_key, target_lang, name=display_name),
+            l10n.format_value(notify_key, target_lang, name=receiver_display_name),
             reply_markup=kb_notify,
         )
         db.save_link(

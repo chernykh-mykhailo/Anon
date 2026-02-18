@@ -165,12 +165,11 @@ async def forward_anonymous_msg(
     # Determine display name for receiver
     # Default is the anonymous number
     display_name = anon_num or data.get("anon_num") or "№???"
+    receiver_display_name = display_name
 
     # Copy message with native reply
     poll_id = None
     if message.poll:
-        # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
-        # they already know the sender's identity. Let's use it if saved in their state.
         try:
             target_state_ctx = FSMContext(
                 storage=state.storage,
@@ -182,7 +181,7 @@ async def forward_anonymous_msg(
             if target_data.get("target_id") == sender_id and target_data.get(
                 "target_name"
             ):
-                display_name = target_data.get("target_name")
+                receiver_display_name = target_data.get("target_name")
         except Exception:
             pass
 
@@ -204,7 +203,7 @@ async def forward_anonymous_msg(
         try:
             await bot.send_message(
                 target_id,
-                l10n.format_value(notify_key, target_lang, name=display_name),
+                l10n.format_value(notify_key, target_lang, name=receiver_display_name),
                 message_effect_id=effect_id,
                 reply_markup=kb_notify,
             )
@@ -212,7 +211,7 @@ async def forward_anonymous_msg(
             # Fallback if effects fail
             await bot.send_message(
                 target_id,
-                l10n.format_value(notify_key, target_lang, name=display_name),
+                l10n.format_value(notify_key, target_lang, name=receiver_display_name),
                 reply_markup=kb_notify,
             )
 
@@ -246,8 +245,6 @@ async def forward_anonymous_msg(
         msg_id = sent_msg.message_id
         poll_id = sent_msg.poll.id
     elif album:
-        # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
-        # they already know the sender's identity. Let's use it if saved in their state.
         try:
             target_state_ctx = FSMContext(
                 storage=state.storage,
@@ -259,7 +256,7 @@ async def forward_anonymous_msg(
             if target_data.get("target_id") == sender_id and target_data.get(
                 "target_name"
             ):
-                display_name = target_data.get("target_name")
+                receiver_display_name = target_data.get("target_name")
         except Exception:
             pass
 
@@ -281,7 +278,7 @@ async def forward_anonymous_msg(
         try:
             await bot.send_message(
                 target_id,
-                l10n.format_value(notify_key, target_lang, name=display_name),
+                l10n.format_value(notify_key, target_lang, name=receiver_display_name),
                 message_effect_id=effect_id,
                 reply_markup=kb_notify,
             )
@@ -289,7 +286,7 @@ async def forward_anonymous_msg(
             # Fallback if effects fail
             await bot.send_message(
                 target_id,
-                l10n.format_value(notify_key, target_lang, name=display_name),
+                l10n.format_value(notify_key, target_lang, name=receiver_display_name),
                 reply_markup=kb_notify,
             )
 
@@ -416,8 +413,10 @@ async def forward_anonymous_msg(
                             pass
 
             # Send notification ONLY if we didn't return (meaning we are sending now)
+            # Receiver notification name
+            receiver_display_name = display_name
+
             # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
-            # they already know the sender's identity. Let's use it if saved in their state.
             try:
                 target_state_ctx = FSMContext(
                     storage=state.storage,
@@ -429,7 +428,7 @@ async def forward_anonymous_msg(
                 if target_data.get("target_id") == sender_id and target_data.get(
                     "target_name"
                 ):
-                    display_name = target_data.get("target_name")
+                    receiver_display_name = target_data.get("target_name")
             except Exception:
                 pass
 
@@ -455,7 +454,9 @@ async def forward_anonymous_msg(
             try:
                 notify_msg = await bot.send_message(
                     target_id,
-                    l10n.format_value(notify_key, target_lang, name=display_name),
+                    l10n.format_value(
+                        notify_key, target_lang, name=receiver_display_name
+                    ),
                     message_effect_id=effect_id,
                     reply_markup=kb_notify,
                 )
@@ -470,7 +471,9 @@ async def forward_anonymous_msg(
                 # Fallback if effects fail
                 notify_msg = await bot.send_message(
                     target_id,
-                    l10n.format_value(notify_key, target_lang, name=display_name),
+                    l10n.format_value(
+                        notify_key, target_lang, name=receiver_display_name
+                    ),
                     reply_markup=kb_notify,
                 )
                 db.save_link(
