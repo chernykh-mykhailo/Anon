@@ -517,37 +517,46 @@ async def forward_anonymous_msg(
                 )
 
             try:
-                notify_msg = await bot.send_message(
-                    target_id,
-                    l10n.format_value(
-                        notify_key, target_lang, name=receiver_display_name
-                    ),
-                    message_effect_id=effect_id,
-                    reply_markup=kb_notify,
-                )
-                db.save_link(
-                    notify_msg.message_id,
-                    target_id,
-                    sender_id,
-                    message.message_id,
-                    message.chat.id,
-                )
+                # If target is already in dialogue with sender, skip the "New message" text to reduce spam
+                if is_target_in_dialogue:
+                    notify_msg = None  # We won't send the "New message" header
+                else:
+                    notify_msg = await bot.send_message(
+                        target_id,
+                        l10n.format_value(
+                            notify_key, target_lang, name=receiver_display_name
+                        ),
+                        message_effect_id=effect_id,
+                        reply_markup=kb_notify,
+                    )
+
+                if notify_msg:
+                    db.save_link(
+                        notify_msg.message_id,
+                        target_id,
+                        sender_id,
+                        message.message_id,
+                        message.chat.id,
+                        anon_num=anon_num,
+                    )
             except Exception:
-                # Fallback if effects fail
-                notify_msg = await bot.send_message(
-                    target_id,
-                    l10n.format_value(
-                        notify_key, target_lang, name=receiver_display_name
-                    ),
-                    reply_markup=kb_notify,
-                )
-                db.save_link(
-                    notify_msg.message_id,
-                    target_id,
-                    sender_id,
-                    message.message_id,
-                    message.chat.id,
-                )
+                # Fallback if effects fail (only if NOT in dialogue)
+                if not is_target_in_dialogue:
+                    notify_msg = await bot.send_message(
+                        target_id,
+                        l10n.format_value(
+                            notify_key, target_lang, name=receiver_display_name
+                        ),
+                        reply_markup=kb_notify,
+                    )
+                    db.save_link(
+                        notify_msg.message_id,
+                        target_id,
+                        sender_id,
+                        message.message_id,
+                        message.chat.id,
+                        anon_num=anon_num,
+                    )
 
             if sent_msg_info:
                 pass
@@ -559,6 +568,7 @@ async def forward_anonymous_msg(
                     caption_entities=message.caption_entities,
                     reply_to_message_id=reply_to_id,
                     has_spoiler=True,
+                    reply_markup=None if is_target_in_dialogue else kb_notify,
                 )
             elif message.video:
                 sent_msg_info = await bot.send_video(
@@ -568,6 +578,7 @@ async def forward_anonymous_msg(
                     caption_entities=message.caption_entities,
                     reply_to_message_id=reply_to_id,
                     has_spoiler=True,
+                    reply_markup=None if is_target_in_dialogue else kb_notify,
                 )
             elif message.animation:
                 sent_msg_info = await bot.send_animation(
@@ -577,6 +588,7 @@ async def forward_anonymous_msg(
                     caption_entities=message.caption_entities,
                     reply_to_message_id=reply_to_id,
                     has_spoiler=True,
+                    reply_markup=None if is_target_in_dialogue else kb_notify,
                 )
             else:
                 if override_text:
@@ -584,6 +596,7 @@ async def forward_anonymous_msg(
                         chat_id=target_id,
                         text=override_text,
                         reply_to_message_id=reply_to_id,
+                        reply_markup=None if is_target_in_dialogue else kb_notify,
                     )
                 else:
                     sent_msg_info = await bot.copy_message(
@@ -591,6 +604,18 @@ async def forward_anonymous_msg(
                         from_chat_id=message.chat.id,
                         message_id=message.message_id,
                         reply_to_message_id=reply_to_id,
+                        reply_markup=None if is_target_in_dialogue else kb_notify,
+                    )
+
+                # Save link for the actual message too if it wasn't saved above
+                if sent_msg_info and not is_target_in_dialogue:
+                    db.save_link(
+                        sent_msg_info.message_id,
+                        target_id,
+                        sender_id,
+                        message.message_id,
+                        message.chat.id,
+                        anon_num=anon_num,
                     )
         except Exception:
             if override_text:
@@ -603,6 +628,16 @@ async def forward_anonymous_msg(
                     from_chat_id=message.chat.id,
                     message_id=message.message_id,
                 )
+            if sent_msg_info:
+                db.save_link(
+                    sent_msg_info.message_id,
+                    target_id,
+                    sender_id,
+                    message.message_id,
+                    message.chat.id,
+                    anon_num=anon_num,
+                )
+
         msg_id = sent_msg_info.message_id
 
     # Save link for future interactions
@@ -628,11 +663,18 @@ async def forward_anonymous_msg(
         ]
     )
 
-    # Only show dialogue management
+    # Logic for name display:
     data = await state.get_data()
     in_dialogue = data.get("target_id") == target_id
+    saved_name = data.get("target_name")
+
+    if in_dialogue and saved_name:
+        target_name_to_show = saved_name
+    else:
+        target_name_to_show = display_name or "№???"
 
     if in_dialogue:
+        # If in dialogue, only show 'Stop' and use the text about 5 minutes
         reply_markup = kb
     else:
         # Even if not in dialogue, show buttons to start it or write more
@@ -654,18 +696,19 @@ async def forward_anonymous_msg(
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(message.chat.id, state, bot)
 
-    # Logic for name display:
-    # Use real name ONLY if we are in an active dialogue started via link with this exact target.
-    # For one-off replies or anonymous dialogs, use №NNN.
-    saved_name = data.get("target_name")
-    if in_dialogue and saved_name:
-        target_name_to_show = saved_name
-    else:
-        target_name_to_show = display_name or "№???"
-
     # Clear reply_to_id after success to prevent leakage
     if not in_dialogue:
         await state.update_data(reply_to_id=None)
+
+    # If in dialogue, use a seamless reaction instead of a confirmation message
+    if in_dialogue:
+        try:
+            from aiogram.types import ReactionTypeEmoji
+
+            await message.react(reactions=[ReactionTypeEmoji(emoji="✅")])
+            return  # Don't send a text message
+        except Exception:
+            pass  # Fallback to text if reactions fail
 
     sent_text = l10n.format_value("msg_sent_to", sender_lang, name=target_name_to_show)
 

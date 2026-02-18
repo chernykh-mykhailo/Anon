@@ -109,10 +109,11 @@ class Database:
                 cursor.execute(
                     "ALTER TABLE user_settings ADD COLUMN anon_audio INTEGER DEFAULT 1"
                 )
-                # For existing users who got 0 from the previous default, upgrade them
-                cursor.execute(
-                    "UPDATE user_settings SET anon_audio = 1 WHERE anon_audio = 0"
-                )
+
+            # Always ensure anon_audio is 1 for those who haven't explicitly turned it off (if migration was 0 before)
+            cursor.execute(
+                "UPDATE user_settings SET anon_audio = 1 WHERE anon_audio IS NULL OR anon_audio = 0"
+            )
 
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS active_sessions (
