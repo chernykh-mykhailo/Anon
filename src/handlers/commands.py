@@ -20,6 +20,13 @@ from services.image_engine import cleanup_image
 router = Router()
 
 
+def _get_session_info_cmd(lang: str) -> str:
+    t = int(db.get_global_config("session_time", "5"))
+    if t == 0:
+        return "∞"
+    return f"{t} хв." if lang == "uk" else f"{t} min."
+
+
 async def set_commands(bot):
     uk_commands = [
         BotCommand(
@@ -251,8 +258,14 @@ async def cmd_start(
                 )
 
                 await state.update_data(target_name=target_name)
+                session_info = _get_session_info_cmd(lang)
                 await message.answer(
-                    l10n.format_value("writing_to_user", lang, name=name_link),
+                    l10n.format_value(
+                        "writing_to_user",
+                        lang,
+                        name=name_link,
+                        session_info=session_info,
+                    ),
                     parse_mode="HTML",
                     reply_markup=kb_stop,
                 )
@@ -270,9 +283,13 @@ async def cmd_start(
                         ]
                     ]
                 )
+                session_info = _get_session_info_cmd(lang)
                 await message.answer(
                     l10n.format_value(
-                        "writing_to_user", lang, name=f"<b>{anon_num_target}</b>"
+                        "writing_to_user",
+                        lang,
+                        name=f"<b>{anon_num_target}</b>",
+                        session_info=session_info,
                     ),
                     parse_mode="HTML",
                     reply_markup=kb_stop,

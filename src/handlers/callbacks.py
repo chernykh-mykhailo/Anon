@@ -15,6 +15,15 @@ from handlers.messages import cleanup_previous_confirmation
 router = Router()
 
 
+def _get_session_info(lang: str) -> str:
+    """Returns human-readable session duration string."""
+    session_time = db.get_global_config("session_time", "5")
+    t = int(session_time)
+    if t == 0:
+        return "∞" if lang != "uk" else "∞"
+    return f"{t} хв." if lang == "uk" else f"{t} min."
+
+
 @router.callback_query(F.data == "admin_set_cooldown")
 async def admin_set_cooldown_callback(callback: types.CallbackQuery, state: FSMContext):
     from config import ADMIN_ID
@@ -134,6 +143,7 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
+        session_info = _get_session_info(lang)
 
         # Clear stale data and set PERSISTENT target
         await state.update_data(
@@ -156,7 +166,7 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
         )
 
         await callback.message.answer(
-            l10n.format_value("writing_to", lang),
+            l10n.format_value("writing_to", lang, session_info=session_info),
             parse_mode="HTML",
             reply_markup=kb_stop,
         )
@@ -171,9 +181,8 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
+        session_info = _get_session_info(lang)
 
-        # Set temp state data but DO NOT set persistent 'writing_message' state globally?
-        # Actually, we need to prompt for message. Let's use a temporary flag.
         await state.update_data(temp_target_id=target_id, temp_reply_to_id=None)
         await state.set_state(Form.writing_message)
 
@@ -189,7 +198,7 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
         )
 
         await callback.message.answer(
-            l10n.format_value("writing_to", lang),
+            l10n.format_value("writing_to", lang, session_info=session_info),
             parse_mode="HTML",
             reply_markup=kb_stop,
         )
