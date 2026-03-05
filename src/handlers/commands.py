@@ -141,6 +141,11 @@ async def cmd_admin(message: Message):
 
     stats = db.get_admin_stats()
     current_cd = db.get_global_config("message_cooldown", "0")
+    session_time = db.get_global_config("session_time", "5")
+    auto_dialogue = db.get_global_config("auto_dialogue", "1")
+
+    auto_icon = "✅" if auto_dialogue == "1" else "❌"
+    session_display = f"{session_time} хв." if session_time != "0" else "∞"
 
     langs_info = "\n".join(
         [
@@ -158,16 +163,28 @@ async def cmd_admin(message: Message):
         f"{langs_info}\n\n"
         f"🚫 <b>Заблоковано:</b>\n"
         f"— Всього: <code>{stats['total_blocks']}</code>\n\n"
-        f"⏱️ <b>Затримка (CD):</b> <code>{current_cd} сек.</code>"
+        f"⚙️ <b>Системні налаштування:</b>\n"
+        f"— КД повідомлень: <code>{current_cd} сек.</code>\n"
+        f"— Час сесії: <code>{session_display}</code>\n"
+        f"— Авто-діалог: {auto_icon}"
     )
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⏱️ Встановити КД", callback_data="admin_set_cooldown"
-                )
-            ]
+                    text="⏱️ Змінити КД", callback_data="admin_set_cooldown"
+                ),
+                InlineKeyboardButton(
+                    text="⏳ Змінити сесію", callback_data="admin_set_session"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{auto_icon} Авто-діалог",
+                    callback_data="admin_toggle_auto_dialogue",
+                ),
+            ],
         ]
     )
     await message.answer(text, parse_mode="HTML", reply_markup=kb)

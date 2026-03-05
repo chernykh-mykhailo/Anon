@@ -67,6 +67,42 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
 
     # 3. Update persistent session if active
     if active_target_id:
+        # --- CHECK SESSION EXPIRY ---
+        import sqlite3 as _sqlite3
+        from datetime import datetime as _dt
+
+        session_minutes = int(db.get_global_config("session_time", "5"))
+        if session_minutes > 0:
+            with _sqlite3.connect(db.db_path) as _conn:
+                _c = _conn.cursor()
+                u1, u2 = sorted([message.from_user.id, active_target_id])
+                _c.execute(
+                    "SELECT updated_at FROM active_sessions WHERE user_a = ? AND user_b = ?",
+                    (u1, u2),
+                )
+                _res = _c.fetchone()
+            if _res:
+                try:
+                    updated_at = _dt.strptime(_res[0], "%Y-%m-%d %H:%M:%S")
+                    diff = (_dt.utcnow() - updated_at).total_seconds()
+                    if diff > (session_minutes * 60):
+                        db.delete_session(message.from_user.id, active_target_id)
+                        await state.clear()
+                        lang = await get_lang(message.from_user.id, message)
+                        await message.answer(
+                            l10n.format_value("error.session_expired", lang)
+                        )
+                        return None, None, None
+                except Exception as _e:
+                    logging.error(f"Session expiry check error: {_e}")
+
+        # --- CHECK AUTO_DIALOGUE ---
+        is_auto = db.get_global_config("auto_dialogue", "1") == "1"
+        if not is_auto:
+            # Auto-dialogue is OFF: clear FSM so next message is NOT in persistent state
+            await state.clear()
+            return None, None, None
+
         if not anon_num:
             anon_num = db.get_available_anon_num(active_target_id, message.from_user.id)
         else:
@@ -1392,6 +1428,27 @@ async def process_setting_cooldown(message: Message, state: FSMContext):
         await state.clear()
     else:
         await message.answer("Будь ласка, введіть число (секунди):")
+
+
+@router.message(Form.setting_session_time)
+async def process_setting_session_time(message: Message, state: FSMContext):
+    from config import ADMIN_ID
+
+    if str(message.from_user.id) != str(ADMIN_ID):
+        await state.clear()
+        return
+
+    text = message.text.strip()
+    if text.isdigit():
+        new_time = int(text)
+        db.set_global_config("session_time", new_time)
+        display = f"{new_time} хв." if new_time > 0 else "∞ (безлім')"
+        await message.answer(
+            f"✅ Час сесії встановлено: <code>{display}</code>", parse_mode="HTML"
+        )
+        await state.clear()
+    else:
+        await message.answer("Пожалуйста, введіть число хвилин (0 = безлім):")
 
 
 @router.message()

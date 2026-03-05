@@ -29,6 +29,84 @@ async def admin_set_cooldown_callback(callback: types.CallbackQuery, state: FSMC
     await callback.answer()
 
 
+@router.callback_query(F.data == "admin_set_session")
+async def admin_set_session_callback(callback: types.CallbackQuery, state: FSMContext):
+    from config import ADMIN_ID
+
+    if str(callback.from_user.id) != str(ADMIN_ID):
+        return await callback.answer("У вас немає прав 🤡")
+
+    current = db.get_global_config("session_time", "5")
+    display = f"{current} хв." if current != "0" else "∞"
+    await state.set_state(Form.setting_session_time)
+    await callback.message.answer(
+        f"Введіть тривалість сесії в хвилинах (0 — безлім):\n(Поточна: <code>{display}</code>)",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "admin_toggle_auto_dialogue")
+async def admin_toggle_auto_dialogue_callback(callback: types.CallbackQuery):
+    from config import ADMIN_ID
+
+    if str(callback.from_user.id) != str(ADMIN_ID):
+        return await callback.answer("У вас немає прав 🤡")
+
+    current = db.get_global_config("auto_dialogue", "1")
+    new_val = "0" if current == "1" else "1"
+    db.set_global_config("auto_dialogue", new_val)
+    auto_icon = "✅" if new_val == "1" else "❌"
+    await callback.answer(
+        f"Авто-діалог {'увімкнено' if new_val == '1' else 'вимкнено'} {auto_icon}",
+        show_alert=True,
+    )
+
+    stats = db.get_admin_stats()
+    current_cd = db.get_global_config("message_cooldown", "0")
+    session_time = db.get_global_config("session_time", "5")
+    session_display = f"{session_time} хв." if session_time != "0" else "∞"
+    langs_info = "\n".join(
+        [
+            f"— {lang.upper()}: <code>{count}</code>"
+            for lang, count in stats["langs"].items()
+        ]
+    )
+    text = (
+        f"📊 <b>АДМІН-ПАНЕЛЬ СТАТИСТИКИ</b>\n\n"
+        f"✉️ <b>Повідомлення:</b>\n"
+        f"— Всього: <code>{stats['msg_total']}</code>\n\n"
+        f"👥 <b>Користувачі:</b>\n"
+        f"— Всього: <code>{stats['total_users']}</code>\n"
+        f"{langs_info}\n\n"
+        f"🚫 <b>Заблоковано:</b>\n"
+        f"— Всього: <code>{stats['total_blocks']}</code>\n\n"
+        f"⚙️ <b>Системні налаштування:</b>\n"
+        f"— КД повідомлень: <code>{current_cd} сек.</code>\n"
+        f"— Час сесії: <code>{session_display}</code>\n"
+        f"— Авто-діалог: {auto_icon}"
+    )
+    kb = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="⏱️ Змінити КД", callback_data="admin_set_cooldown"
+                ),
+                InlineKeyboardButton(
+                    text="⏳ Змінити сесію", callback_data="admin_set_session"
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text=f"{auto_icon} Авто-діалог",
+                    callback_data="admin_toggle_auto_dialogue",
+                )
+            ],
+        ]
+    )
+    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
+
+
 @router.callback_query(F.data == "my_link")
 async def my_link(callback: types.CallbackQuery, bot: Bot):
     lang = await get_lang(callback.from_user.id, callback.message)
