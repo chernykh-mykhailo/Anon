@@ -814,13 +814,9 @@ async def process_voice_command(
         if user_settings.get("skip_confirm_voice"):
             from handlers.callbacks import confirm_media_send
 
-            # Try to get target name for personalized confirmation
-            try:
-                target_chat = await bot.get_chat(target_id)
-                target_name = target_chat.first_name
-                sent_text = l10n.format_value("msg_sent_to", lang, name=target_name)
-            except Exception:
-                sent_text = l10n.format_value("msg_sent", lang)
+            # Try to get anonymous number for confirmation
+            target_name = db.get_available_anon_num(target_id, message.from_user.id)
+            sent_text = l10n.format_value("msg_sent_to", lang, name=target_name)
 
             # Check CD before sending preview/confirmation
             cd_seconds = int(db.get_global_config("message_cooldown", DEFAULT_COOLDOWN))

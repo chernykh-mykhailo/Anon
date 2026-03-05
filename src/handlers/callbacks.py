@@ -246,6 +246,7 @@ async def confirm_media_send(
     receiver_display_name = display_name
 
     # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
+    target_data = {}
     try:
         target_state_ctx = FSMContext(
             storage=state.storage,
@@ -360,15 +361,17 @@ async def confirm_media_send(
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
 
-    # Anonymity fix: Use №NNN instead of real name for replies
-    data = await state.get_data()
-    in_dialogue = data.get("target_id") == target_id
-    saved_name = data.get("target_name")
+    # Anonymity fix: Use №NNN instead of real name for confirmation
+    sender_data = await state.get_data()
+    in_dialogue = sender_data.get("target_id") == target_id
+    saved_name = sender_data.get("target_name")
 
     if in_dialogue and saved_name:
         target_name_to_show = saved_name
     else:
-        target_name_to_show = data.get("anon_num") or "№???"
+        target_name_to_show = sender_data.get("anon_num") or db.get_available_anon_num(
+            target_id, callback.from_user.id
+        )
 
     sent_text = l10n.format_value("msg_sent_to", lang, name=target_name_to_show)
 
@@ -495,10 +498,17 @@ async def confirm_original_send(
     # Response to sender
     await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
 
-    in_dialogue = data.get("target_id") == target_id
-    saved_name = data.get("target_name")
+    # Anonymity fix: Use №NNN instead of real name for confirmation
+    sender_data = await state.get_data()
+    in_dialogue = sender_data.get("target_id") == target_id
+    saved_name = sender_data.get("target_name")
     target_name_to_show = (
-        saved_name if (in_dialogue and saved_name) else (data.get("anon_num") or "№???")
+        saved_name
+        if (in_dialogue and saved_name)
+        else (
+            sender_data.get("anon_num")
+            or db.get_available_anon_num(target_id, callback.from_user.id)
+        )
     )
 
     sent_text = l10n.format_value("msg_sent_to", lang, name=target_name_to_show)
