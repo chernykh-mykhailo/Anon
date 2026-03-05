@@ -40,4 +40,4 @@ async def clean_stale_sessions(bot: Bot, storage):
         except Exception as e:
             logging.error(f"Error in session cleaner: {e}")
 
-        await asyncio.sleep(60)  # Check every minute
+        await asyncio.sleep(max(60, session_minutes * 60))  # sleep = session duration
