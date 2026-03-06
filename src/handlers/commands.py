@@ -20,13 +20,6 @@ from services.image_engine import cleanup_image
 router = Router()
 
 
-def _get_session_info_cmd(lang: str) -> str:
-    t = int(db.get_global_config("session_time", "5"))
-    if t == 0:
-        return "∞"
-    return f"{t} хв." if lang == "uk" else f"{t} min."
-
-
 async def set_commands(bot):
     uk_commands = [
         BotCommand(
@@ -148,11 +141,6 @@ async def cmd_admin(message: Message):
 
     stats = db.get_admin_stats()
     current_cd = db.get_global_config("message_cooldown", "0")
-    session_time = db.get_global_config("session_time", "5")
-    auto_dialogue = db.get_global_config("auto_dialogue", "1")
-
-    auto_icon = "✅" if auto_dialogue == "1" else "❌"
-    session_display = f"{session_time} хв." if session_time != "0" else "∞"
 
     langs_info = "\n".join(
         [
@@ -170,28 +158,16 @@ async def cmd_admin(message: Message):
         f"{langs_info}\n\n"
         f"🚫 <b>Заблоковано:</b>\n"
         f"— Всього: <code>{stats['total_blocks']}</code>\n\n"
-        f"⚙️ <b>Системні налаштування:</b>\n"
-        f"— КД повідомлень: <code>{current_cd} сек.</code>\n"
-        f"— Час сесії: <code>{session_display}</code>\n"
-        f"— Авто-діалог: {auto_icon}"
+        f"⏱️ <b>Затримка (CD):</b> <code>{current_cd} сек.</code>"
     )
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="⏱️ Змінити КД", callback_data="admin_set_cooldown"
-                ),
-                InlineKeyboardButton(
-                    text="⏳ Змінити сесію", callback_data="admin_set_session"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=f"{auto_icon} Авто-діалог",
-                    callback_data="admin_toggle_auto_dialogue",
-                ),
-            ],
+                    text="⏱️ Встановити КД", callback_data="admin_set_cooldown"
+                )
+            ]
         ]
     )
     await message.answer(text, parse_mode="HTML", reply_markup=kb)
@@ -258,14 +234,8 @@ async def cmd_start(
                 )
 
                 await state.update_data(target_name=target_name)
-                session_info = _get_session_info_cmd(lang)
                 await message.answer(
-                    l10n.format_value(
-                        "writing_to_user",
-                        lang,
-                        name=name_link,
-                        session_info=session_info,
-                    ),
+                    l10n.format_value("writing_to_user", lang, name=name_link),
                     parse_mode="HTML",
                     reply_markup=kb_stop,
                 )
@@ -283,13 +253,9 @@ async def cmd_start(
                         ]
                     ]
                 )
-                session_info = _get_session_info_cmd(lang)
                 await message.answer(
                     l10n.format_value(
-                        "writing_to_user",
-                        lang,
-                        name=f"<b>{anon_num_target}</b>",
-                        session_info=session_info,
+                        "writing_to_user", lang, name=f"<b>{anon_num_target}</b>"
                     ),
                     parse_mode="HTML",
                     reply_markup=kb_stop,

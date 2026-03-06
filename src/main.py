@@ -2,11 +2,9 @@ import asyncio
 import logging
 import os
 from aiogram import Bot, Dispatcher
-from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
 from handlers import setup_handlers, commands
 from middlewares.media_group import MediaGroupMiddleware
-from tasks.session_cleaner import clean_stale_sessions
 
 
 def startup_cleanup():
@@ -34,8 +32,7 @@ async def main():
         return
 
     bot = Bot(token=BOT_TOKEN)
-    storage = MemoryStorage()
-    dp = Dispatcher(storage=storage)
+    dp = Dispatcher()
 
     # Setup handlers
     dp.include_router(setup_handlers())
@@ -43,9 +40,6 @@ async def main():
 
     # Register commands in menu
     await commands.set_commands(bot)
-
-    # Start background session cleaner
-    asyncio.create_task(clean_stale_sessions(bot, storage))
 
     # Startup
     print("Bot started...")

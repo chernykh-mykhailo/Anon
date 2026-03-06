@@ -15,15 +15,6 @@ from handlers.messages import cleanup_previous_confirmation
 router = Router()
 
 
-def _get_session_info(lang: str) -> str:
-    """Returns human-readable session duration string."""
-    session_time = db.get_global_config("session_time", "5")
-    t = int(session_time)
-    if t == 0:
-        return "∞" if lang != "uk" else "∞"
-    return f"{t} хв." if lang == "uk" else f"{t} min."
-
-
 @router.callback_query(F.data == "admin_set_cooldown")
 async def admin_set_cooldown_callback(callback: types.CallbackQuery, state: FSMContext):
     from config import ADMIN_ID
@@ -36,84 +27,6 @@ async def admin_set_cooldown_callback(callback: types.CallbackQuery, state: FSMC
         "Введіть нове значення КД (затримки) в секундах (0 — вимкнути):"
     )
     await callback.answer()
-
-
-@router.callback_query(F.data == "admin_set_session")
-async def admin_set_session_callback(callback: types.CallbackQuery, state: FSMContext):
-    from config import ADMIN_ID
-
-    if str(callback.from_user.id) != str(ADMIN_ID):
-        return await callback.answer("У вас немає прав 🤡")
-
-    current = db.get_global_config("session_time", "5")
-    display = f"{current} хв." if current != "0" else "∞"
-    await state.set_state(Form.setting_session_time)
-    await callback.message.answer(
-        f"Введіть тривалість сесії в хвилинах (0 — безлім):\n(Поточна: <code>{display}</code>)",
-        parse_mode="HTML",
-    )
-    await callback.answer()
-
-
-@router.callback_query(F.data == "admin_toggle_auto_dialogue")
-async def admin_toggle_auto_dialogue_callback(callback: types.CallbackQuery):
-    from config import ADMIN_ID
-
-    if str(callback.from_user.id) != str(ADMIN_ID):
-        return await callback.answer("У вас немає прав 🤡")
-
-    current = db.get_global_config("auto_dialogue", "1")
-    new_val = "0" if current == "1" else "1"
-    db.set_global_config("auto_dialogue", new_val)
-    auto_icon = "✅" if new_val == "1" else "❌"
-    await callback.answer(
-        f"Авто-діалог {'увімкнено' if new_val == '1' else 'вимкнено'} {auto_icon}",
-        show_alert=True,
-    )
-
-    stats = db.get_admin_stats()
-    current_cd = db.get_global_config("message_cooldown", "0")
-    session_time = db.get_global_config("session_time", "5")
-    session_display = f"{session_time} хв." if session_time != "0" else "∞"
-    langs_info = "\n".join(
-        [
-            f"— {lang.upper()}: <code>{count}</code>"
-            for lang, count in stats["langs"].items()
-        ]
-    )
-    text = (
-        f"📊 <b>АДМІН-ПАНЕЛЬ СТАТИСТИКИ</b>\n\n"
-        f"✉️ <b>Повідомлення:</b>\n"
-        f"— Всього: <code>{stats['msg_total']}</code>\n\n"
-        f"👥 <b>Користувачі:</b>\n"
-        f"— Всього: <code>{stats['total_users']}</code>\n"
-        f"{langs_info}\n\n"
-        f"🚫 <b>Заблоковано:</b>\n"
-        f"— Всього: <code>{stats['total_blocks']}</code>\n\n"
-        f"⚙️ <b>Системні налаштування:</b>\n"
-        f"— КД повідомлень: <code>{current_cd} сек.</code>\n"
-        f"— Час сесії: <code>{session_display}</code>\n"
-        f"— Авто-діалог: {auto_icon}"
-    )
-    kb = InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="⏱️ Змінити КД", callback_data="admin_set_cooldown"
-                ),
-                InlineKeyboardButton(
-                    text="⏳ Змінити сесію", callback_data="admin_set_session"
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text=f"{auto_icon} Авто-діалог",
-                    callback_data="admin_toggle_auto_dialogue",
-                )
-            ],
-        ]
-    )
-    await callback.message.edit_text(text, parse_mode="HTML", reply_markup=kb)
 
 
 @router.callback_query(F.data == "my_link")
@@ -143,7 +56,6 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
-        session_info = _get_session_info(lang)
 
         # Clear stale data and set PERSISTENT target
         await state.update_data(
@@ -166,7 +78,7 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
         )
 
         await callback.message.answer(
-            l10n.format_value("writing_to", lang, session_info=session_info),
+            l10n.format_value("writing_to", lang),
             parse_mode="HTML",
             reply_markup=kb_stop,
         )
@@ -181,11 +93,10 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
-        session_info = _get_session_info(lang)
 
-        await state.update_data(
-            temp_target_id=target_id, temp_reply_to_id=None, target_name=None
-        )
+        # Set temp state data but DO NOT set persistent 'writing_message' state globally?
+        # Actually, we need to prompt for message. Let's use a temporary flag.
+        await state.update_data(temp_target_id=target_id, temp_reply_to_id=None)
         await state.set_state(Form.writing_message)
 
         kb_stop = InlineKeyboardMarkup(
@@ -200,7 +111,7 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
         )
 
         await callback.message.answer(
-            l10n.format_value("writing_to", lang, session_info=session_info),
+            l10n.format_value("writing_to", lang),
             parse_mode="HTML",
             reply_markup=kb_stop,
         )
@@ -335,7 +246,6 @@ async def confirm_media_send(
     receiver_display_name = display_name
 
     # REVEAL LOGIC: If the receiver (target_id) already knows the sender's identity via link
-    target_data = {}
     try:
         target_state_ctx = FSMContext(
             storage=state.storage,
@@ -450,17 +360,15 @@ async def confirm_media_send(
     # Try to delete previous confirmation to avoid clutter
     await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
 
-    # Anonymity fix: Use №NNN instead of real name for confirmation
-    sender_data = await state.get_data()
-    in_dialogue = sender_data.get("target_id") == target_id
-    saved_name = sender_data.get("target_name")
+    # Anonymity fix: Use №NNN instead of real name for replies
+    data = await state.get_data()
+    in_dialogue = data.get("target_id") == target_id
+    saved_name = data.get("target_name")
 
     if in_dialogue and saved_name:
         target_name_to_show = saved_name
     else:
-        target_name_to_show = sender_data.get("anon_num") or db.get_available_anon_num(
-            target_id, callback.from_user.id
-        )
+        target_name_to_show = data.get("anon_num") or "№???"
 
     sent_text = l10n.format_value("msg_sent_to", lang, name=target_name_to_show)
 
@@ -587,17 +495,10 @@ async def confirm_original_send(
     # Response to sender
     await cleanup_previous_confirmation(callback.message.chat.id, state, bot)
 
-    # Anonymity fix: Use №NNN instead of real name for confirmation
-    sender_data = await state.get_data()
-    in_dialogue = sender_data.get("target_id") == target_id
-    saved_name = sender_data.get("target_name")
+    in_dialogue = data.get("target_id") == target_id
+    saved_name = data.get("target_name")
     target_name_to_show = (
-        saved_name
-        if (in_dialogue and saved_name)
-        else (
-            sender_data.get("anon_num")
-            or db.get_available_anon_num(target_id, callback.from_user.id)
-        )
+        saved_name if (in_dialogue and saved_name) else (data.get("anon_num") or "№???")
     )
 
     sent_text = l10n.format_value("msg_sent_to", lang, name=target_name_to_show)
