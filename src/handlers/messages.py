@@ -703,7 +703,8 @@ async def forward_anonymous_msg(
     # Logic for name display:
     data = await state.get_data()
     in_dialogue = data.get("target_id") == target_id
-    is_oneoff = data.get("is_oneoff", False)
+    is_auto = db.get_global_config("auto_dialogue", "1") == "1"
+    is_oneoff = data.get("is_oneoff", False) or not is_auto
     saved_name = data.get("target_name")
 
     if in_dialogue and saved_name:
