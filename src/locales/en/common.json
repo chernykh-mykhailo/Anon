@@ -69,6 +69,8 @@
     "voice_rnd_short": "🎲 Random",
     "writing_to": "You are writing an anonymous message. Type anything or send media ✨\n\n<blockquote>Session lasts {session_info}.\nUse <code>/cancel</code> to stop the dialogue.\n\n<i>Use /help to see all features</i></blockquote>",
     "writing_to_user": "You are writing an anonymous message to <b>{name}</b> 👤\n\nType anything or send media ✨\n\n<blockquote>Session lasts {session_info}.\nUse <code>/cancel</code> to stop the dialogue.\n\n<i>Use /help to see all features</i></blockquote>",
+    "writing_to_oneoff": "You are writing an anonymous message. Type anything or send media ✨\n\n<blockquote>\nUse /cancel to cancel.</blockquote>\n\n<i>Use /help to see all features</i>",
+    "writing_to_user_oneoff": "You are writing an anonymous message to <b>{name}</b> 👤\n\nType anything or send media ✨\n\n<blockquote>\nUse /cancel to cancel.\n\n<i>Use /help to see all features</i></blockquote>",
     "still_writing_to": "You are still writing to <b>{name}</b> 👤",
     "donate_text": "📬 <b>Support the development</b>\n\nHi! I develop this bot purely on enthusiasm and a desire to create a great product. Your donation will help pay for hosting and add new cool features.\n\n💳 <b>Monobank (Jar):</b> <code>4874 1000 2299 4738</code>\n🔗 <a href='https://send.monobank.ua/jar/9R29UVD9bP'>Direct link</a>\n\n🅿️ <b>PayPal:</b> <code>Myshkode</code>\n🔗 <a href='https://www.paypal.me/Myshkode'>PayPal link</a>\n\nEven a small amount matters! Thank you for the support! ❤️",
     "your_image_preview": "🎨 Here is the card I prepared for sending:",

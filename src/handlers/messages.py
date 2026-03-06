@@ -99,9 +99,12 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
         # --- CHECK AUTO_DIALOGUE ---
         is_auto = db.get_global_config("auto_dialogue", "1") == "1"
         if not is_auto:
-            # Auto-dialogue is OFF: clear FSM so next message is NOT in persistent state
+            # One-off: allow this message through, then clear state so dialogue doesn't persist
+            oneoff_num = anon_num or db.get_available_anon_num(
+                active_target_id, message.from_user.id
+            )
             await state.clear()
-            return None, None, None
+            return active_target_id, reply_to_id, oneoff_num
 
         if not anon_num:
             anon_num = db.get_available_anon_num(active_target_id, message.from_user.id)

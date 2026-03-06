@@ -20,8 +20,8 @@ def _get_session_info(lang: str) -> str:
     session_time = db.get_global_config("session_time", "5")
     t = int(session_time)
     if t == 0:
-        return "∞" if lang != "uk" else "∞"
-    return f"{t} хв." if lang == "uk" else f"{t} min."
+        return "∞"
+    return f"{t} хв" if lang == "uk" else f"{t} min"
 
 
 @router.callback_query(F.data == "admin_set_cooldown")
@@ -139,19 +139,26 @@ async def set_lang(callback: types.CallbackQuery):
 
 @router.callback_query(F.data.startswith("write_to_"))
 async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMContext):
-    """Callback to start a PERSISTENT dialogue."""
+    """Callback to start a PERSISTENT dialogue (or one-off if auto_dialogue=0)."""
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
-        session_info = _get_session_info(lang)
+        is_auto = db.get_global_config("auto_dialogue", "1") == "1"
+        anon_num_val = db.get_available_anon_num(target_id, callback.from_user.id)
 
-        # Clear stale data and set PERSISTENT target
-        await state.update_data(
-            target_id=target_id,
-            target_name=None,
-            reply_to_id=None,
-            anon_num=db.get_available_anon_num(target_id, callback.from_user.id),
-        )
+        if is_auto:
+            await state.update_data(
+                target_id=target_id,
+                target_name=None,
+                reply_to_id=None,
+                anon_num=anon_num_val,
+            )
+        else:
+            await state.update_data(
+                temp_target_id=target_id,
+                temp_reply_to_id=None,
+                anon_num=anon_num_val,
+            )
         await state.set_state(Form.writing_message)
 
         kb_stop = InlineKeyboardMarkup(
@@ -165,11 +172,14 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
             ]
         )
 
-        await callback.message.answer(
-            l10n.format_value("writing_to", lang, session_info=session_info),
-            parse_mode="HTML",
-            reply_markup=kb_stop,
-        )
+        if is_auto:
+            text = l10n.format_value(
+                "writing_to", lang, session_info=_get_session_info(lang)
+            )
+        else:
+            text = l10n.format_value("writing_to_oneoff", lang)
+
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb_stop)
         await callback.answer()
     except Exception:
         await callback.answer()

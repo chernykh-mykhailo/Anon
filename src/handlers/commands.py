@@ -24,7 +24,7 @@ def _get_session_info_cmd(lang: str) -> str:
     t = int(db.get_global_config("session_time", "5"))
     if t == 0:
         return "∞"
-    return f"{t} хв." if lang == "uk" else f"{t} min."
+    return f"{t} хв" if lang == "uk" else f"{t} min"
 
 
 async def set_commands(bot):
@@ -228,14 +228,20 @@ async def cmd_start(
                     l10n.format_value("error.self_message", lang)
                 )
 
-            await state.update_data(
-                target_id=target_id,
-                reply_to_id=None,
-                anon_num=db.get_available_anon_num(target_id, message.from_user.id),
-            )
+            is_auto = db.get_global_config("auto_dialogue", "1") == "1"
+            anon_num_val = db.get_available_anon_num(target_id, message.from_user.id)
+
+            if is_auto:
+                await state.update_data(
+                    target_id=target_id, reply_to_id=None, anon_num=anon_num_val
+                )
+            else:
+                await state.update_data(
+                    temp_target_id=target_id,
+                    temp_reply_to_id=None,
+                    anon_num=anon_num_val,
+                )
             await state.set_state(Form.writing_message)
-            # When clicking a link, the sender knows who they are writing to.
-            # We show and save the name.
             target_name = "Anonymous"
             try:
                 target_chat = await bot.get_chat(target_id)
@@ -258,19 +264,26 @@ async def cmd_start(
                 )
 
                 await state.update_data(target_name=target_name)
-                session_info = _get_session_info_cmd(lang)
-                await message.answer(
-                    l10n.format_value(
-                        "writing_to_user",
-                        lang,
-                        name=name_link,
-                        session_info=session_info,
-                    ),
-                    parse_mode="HTML",
-                    reply_markup=kb_stop,
-                )
+                if is_auto:
+                    await message.answer(
+                        l10n.format_value(
+                            "writing_to_user",
+                            lang,
+                            name=name_link,
+                            session_info=_get_session_info_cmd(lang),
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=kb_stop,
+                    )
+                else:
+                    await message.answer(
+                        l10n.format_value(
+                            "writing_to_user_oneoff", lang, name=name_link
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=kb_stop,
+                    )
             except Exception:
-                # Fallback if chat info cannot be fetched
                 state_data = await state.get_data()
                 anon_num_target = state_data.get("anon_num") or "№???"
                 kb_stop = InlineKeyboardMarkup(
@@ -283,17 +296,27 @@ async def cmd_start(
                         ]
                     ]
                 )
-                session_info = _get_session_info_cmd(lang)
-                await message.answer(
-                    l10n.format_value(
-                        "writing_to_user",
-                        lang,
-                        name=f"<b>{anon_num_target}</b>",
-                        session_info=session_info,
-                    ),
-                    parse_mode="HTML",
-                    reply_markup=kb_stop,
-                )
+                if is_auto:
+                    await message.answer(
+                        l10n.format_value(
+                            "writing_to_user",
+                            lang,
+                            name=f"<b>{anon_num_target}</b>",
+                            session_info=_get_session_info_cmd(lang),
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=kb_stop,
+                    )
+                else:
+                    await message.answer(
+                        l10n.format_value(
+                            "writing_to_user_oneoff",
+                            lang,
+                            name=f"<b>{anon_num_target}</b>",
+                        ),
+                        parse_mode="HTML",
+                        reply_markup=kb_stop,
+                    )
         except ValueError:
             await message.answer(l10n.format_value("error.invalid_link", lang))
     else:
