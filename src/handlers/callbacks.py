@@ -183,7 +183,9 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
         lang = await get_lang(callback.from_user.id, callback.message)
         session_info = _get_session_info(lang)
 
-        await state.update_data(temp_target_id=target_id, temp_reply_to_id=None)
+        await state.update_data(
+            temp_target_id=target_id, temp_reply_to_id=None, target_name=None
+        )
         await state.set_state(Form.writing_message)
 
         kb_stop = InlineKeyboardMarkup(
