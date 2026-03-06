@@ -708,10 +708,11 @@ async def forward_anonymous_msg(
     if in_dialogue and saved_name:
         target_name_to_show = saved_name
     else:
-        target_name_to_show = display_name or "\u2116???"
+        target_name_to_show = display_name or "№???"
 
+    if in_dialogue:
+        reply_markup = kb  # "Stop writing"
     else:
-        # Even if not in dialogue, show buttons to start it or write more
         reply_markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
