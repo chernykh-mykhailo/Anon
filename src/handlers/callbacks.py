@@ -190,10 +190,18 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
     """Callback for a ONE-OFF message (Write More)."""
     try:
         target_id = int(callback.data.split("_")[-1])
+        # Force delete previous session to get a NEW number on next message
+        db.delete_session(callback.from_user.id, target_id)
+
         lang = await get_lang(callback.from_user.id, callback.message)
         is_auto = db.get_global_config("auto_dialogue", "1") == "1"
 
-        await state.update_data(temp_target_id=target_id, temp_reply_to_id=None)
+        await state.update_data(
+            temp_target_id=target_id,
+            temp_reply_to_id=None,
+            anon_num=None,
+            target_name=None,
+        )
         await state.set_state(Form.writing_message)
 
         kb_stop = InlineKeyboardMarkup(
@@ -207,12 +215,16 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
             ]
         )
 
+        name_to_show = "👤"
         if is_auto:
             text = l10n.format_value(
-                "writing_to", lang, name="👤", session_info=_get_session_info(lang)
+                "writing_to",
+                lang,
+                name=name_to_show,
+                session_info=_get_session_info(lang),
             )
         else:
-            text = l10n.format_value("writing_to_oneoff", lang, name="👤")
+            text = l10n.format_value("writing_to_oneoff", lang, name=name_to_show)
 
         await callback.message.answer(text, parse_mode="HTML", reply_markup=kb_stop)
         await callback.answer()

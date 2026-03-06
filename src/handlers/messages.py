@@ -66,9 +66,9 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
                 )
                 return reply_target_id, reply_to_id, num_to_use
 
-            # If it's a reply to the CURRENT active session, use the message's number if possible
+            # If it's a reply to the CURRENT active session, MUST use the message's number if possible
             if link_anon_num:
-                anon_num = link_anon_num
+                return reply_target_id, reply_to_id, link_anon_num
 
     # 2. Check for temporary "Write More" (one-off)
     temp_target_id = state_data.get("temp_target_id")
@@ -582,7 +582,7 @@ async def forward_anonymous_msg(
                         sender_id,
                         message.message_id,
                         message.chat.id,
-                        anon_num=anon_num,
+                        anon_num=display_name,
                     )
 
             if sent_msg_info:
@@ -662,7 +662,7 @@ async def forward_anonymous_msg(
                     sender_id,
                     message.message_id,
                     message.chat.id,
-                    anon_num=anon_num,
+                    anon_num=display_name,
                 )
 
         msg_id = sent_msg_info.message_id
@@ -695,8 +695,9 @@ async def forward_anonymous_msg(
     in_dialogue = data.get("target_id") == target_id
     saved_name = data.get("target_name")
 
-    if saved_name:
-        # Sender knows the recipient (clicked link / has active session) — use real name
+    # Show real name ONLY in active persistent dialogue where sender explicitly knows the target.
+    # For one-off ("Write More") and replies to anon messages — always show anon number.
+    if in_dialogue and saved_name:
         target_name_to_show = saved_name
     else:
         target_name_to_show = display_name or "№???"
@@ -1337,8 +1338,19 @@ def get_draw_kb(s: dict, lang: str) -> InlineKeyboardMarkup:
 async def process_reply(
     message: Message, bot: Bot, state: FSMContext, album: List[Message] = None
 ):
+    # Check if we are already in an active dialogue
+    data = await state.get_data()
+    active_target_id = data.get("target_id")
+
     # This will sync target from reply
     target_id, reply_to_id, anon_num = await get_target_and_remind(message, state, bot)
+
+    # RECOVERY: If we were in dialogue and replied to the SAME person,
+    # get_target_and_remind might have returned it as a one-off.
+    # We should restore the dialogue state if it matches.
+    if active_target_id and target_id == active_target_id:
+        await state.set_state(Form.writing_message)
+        await state.update_data(target_id=active_target_id)
 
     if target_id:
         await forward_anonymous_msg(
@@ -1376,7 +1388,11 @@ async def process_anonymous_message(
         await state.clear()
         return
 
-    # If not already provided (e.g. from process_unknown), find it
+    # If not already provided (e.g. from process_unknown), check state data
+    if not target_id:
+        data = await state.get_data()
+        target_id = data.get("target_id")
+
     # Always refresh target and anon_num to ensure directional accuracy
     target_id, reply_to_id, anon_num = await get_target_and_remind(message, state, bot)
 
@@ -1426,9 +1442,7 @@ async def process_setting_cooldown(message: Message, state: FSMContext):
         )
         await state.clear()
     else:
-        await message.answer(
-            "ðæÐâð┤Ðî ð╗ð░Ðüð║ð░, ð▓ð▓ðÁð┤ÐûÐéÐî Ðçð©Ðüð╗ð¥ (ÐüðÁð║Ðâð¢ð┤ð©):"
-        )
+        await message.answer(l10n.format_value("admin.enter_cooldown", lang))
 
 
 @router.message(Form.setting_session_time)
@@ -1439,25 +1453,31 @@ async def process_setting_session_time(message: Message, state: FSMContext):
         await state.clear()
         return
 
+    lang = await get_lang(message.from_user.id, message)
     text = message.text.strip()
     if text.isdigit():
         new_time = int(text)
         db.set_global_config("session_time", new_time)
-        display = f"{new_time} Ðàð▓." if new_time > 0 else "Ôê× (ð▒ðÁðÀð╗Ðûð╝')"
+        display = (
+            f"{new_time} хв." if new_time > 0 else l10n.format_value("status_off", lang)
+        )
         await message.answer(
-            f"Ô£à ðºð░Ðü ÐüðÁÐüÐûÐù ð▓ÐüÐéð░ð¢ð¥ð▓ð╗ðÁð¢ð¥: <code>{display}</code>",
+            l10n.format_value("admin.session_time_set", lang, display=display),
             parse_mode="HTML",
         )
         await state.clear()
     else:
-        await message.answer(
-            "ðƒð¥ðÂð░ð╗Ðâð╣ÐüÐéð░, ð▓ð▓ðÁð┤ÐûÐéÐî Ðçð©Ðüð╗ð¥ Ðàð▓ð©ð╗ð©ð¢ (0 = ð▒ðÁðÀð╗Ðûð╝):"
-        )
+        await message.answer(l10n.format_value("admin.enter_session_time", lang))
 
 
 @router.message()
 async def process_unknown(message: Message, state: FSMContext):
-    # Only answer if it's not a reply (replies are handled above)
+    # 1. Check if user is already in 'writing' state (active dialogue)
+    current_state = await state.get_state()
+    if current_state == Form.writing_message:
+        return await process_anonymous_message(message, state, message.bot)
+
+    # 2. Only answer if it's not a reply (replies are handled above)
     # AND only in PRIVATE chats to avoid spamming groups
     if not message.reply_to_message and message.chat.type == "private":
         target_id, reply_to_id, anon_num = await get_target_and_remind(

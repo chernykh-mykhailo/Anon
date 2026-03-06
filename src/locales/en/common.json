@@ -120,6 +120,9 @@
     },
     "admin": {
         "log_activated": "✅ Logs activated for this chat: <code>{chat_id}</code>{thread_info}\n\n<i>Changes saved. Reports will be sent here.</i>",
-        "cooldown_set": "Cooldown set to: {seconds} sec. ✅"
+        "cooldown_set": "Cooldown set to: {seconds} sec. ✅",
+        "enter_cooldown": "Please enter the number of seconds for the message cooldown:",
+        "session_time_set": "✅ Session time set: <code>{display}</code>",
+        "enter_session_time": "Please enter the session time in minutes (0 = unlimited):"
     }
 }
