@@ -174,10 +174,10 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
 
         if is_auto:
             text = l10n.format_value(
-                "writing_to", lang, session_info=_get_session_info(lang)
+                "writing_to", lang, name="👤", session_info=_get_session_info(lang)
             )
         else:
-            text = l10n.format_value("writing_to_oneoff", lang)
+            text = l10n.format_value("writing_to_oneoff", lang, name="👤")
 
         await callback.message.answer(text, parse_mode="HTML", reply_markup=kb_stop)
         await callback.answer()
@@ -209,10 +209,10 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
 
         if is_auto:
             text = l10n.format_value(
-                "writing_to", lang, session_info=_get_session_info(lang)
+                "writing_to", lang, name="👤", session_info=_get_session_info(lang)
             )
         else:
-            text = l10n.format_value("writing_to_oneoff", lang)
+            text = l10n.format_value("writing_to_oneoff", lang, name="👤")
 
         await callback.message.answer(text, parse_mode="HTML", reply_markup=kb_stop)
         await callback.answer()

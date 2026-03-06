@@ -267,7 +267,7 @@ async def cmd_start(
                 if is_auto:
                     await message.answer(
                         l10n.format_value(
-                            "writing_to_user",
+                            "writing_to",
                             lang,
                             name=name_link,
                             session_info=_get_session_info_cmd(lang),
@@ -277,9 +277,7 @@ async def cmd_start(
                     )
                 else:
                     await message.answer(
-                        l10n.format_value(
-                            "writing_to_user_oneoff", lang, name=name_link
-                        ),
+                        l10n.format_value("writing_to_oneoff", lang, name=name_link),
                         parse_mode="HTML",
                         reply_markup=kb_stop,
                     )
@@ -299,7 +297,7 @@ async def cmd_start(
                 if is_auto:
                     await message.answer(
                         l10n.format_value(
-                            "writing_to_user",
+                            "writing_to",
                             lang,
                             name=f"<b>{anon_num_target}</b>",
                             session_info=_get_session_info_cmd(lang),
@@ -310,7 +308,7 @@ async def cmd_start(
                 else:
                     await message.answer(
                         l10n.format_value(
-                            "writing_to_user_oneoff",
+                            "writing_to_oneoff",
                             lang,
                             name=f"<b>{anon_num_target}</b>",
                         ),
