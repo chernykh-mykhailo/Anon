@@ -99,11 +99,11 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
         # --- CHECK AUTO_DIALOGUE ---
         is_auto = db.get_global_config("auto_dialogue", "1") == "1"
         if not is_auto:
-            # One-off: allow this message through, then clear state so dialogue doesn't persist
+            # Mark as one-off so forward_anonymous_msg can clean up after confirmation
             oneoff_num = anon_num or db.get_available_anon_num(
                 active_target_id, message.from_user.id
             )
-            await state.clear()
+            await state.update_data(is_oneoff=True)
             return active_target_id, reply_to_id, oneoff_num
 
         if not anon_num:
@@ -703,15 +703,28 @@ async def forward_anonymous_msg(
     # Logic for name display:
     data = await state.get_data()
     in_dialogue = data.get("target_id") == target_id
+    is_oneoff = data.get("is_oneoff", False)
     saved_name = data.get("target_name")
 
     if in_dialogue and saved_name:
         target_name_to_show = saved_name
     else:
-        target_name_to_show = display_name or "№???"
+        target_name_to_show = display_name or "\u2116???"
 
-    if in_dialogue:
-        # If in dialogue, only show 'Stop' and use the text about 5 minutes
+    if is_oneoff:
+        # One-off mode: only "Write more" button, no persistent dialogue option
+        reply_markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text=l10n.format_value("button.write_more", sender_lang),
+                        callback_data=f"send_again_{target_id}",
+                    ),
+                ]
+            ]
+        )
+    elif in_dialogue:
+        # If in dialogue, only show 'Stop'
         reply_markup = kb
     else:
         # Even if not in dialogue, show buttons to start it or write more
@@ -736,10 +749,10 @@ async def forward_anonymous_msg(
     # Clear reply_to_id after success to prevent it sticking in dialogue
     await state.update_data(reply_to_id=None)
 
-    # If in dialogue, use a seamless reaction instead of a confirmation message
-    if in_dialogue:
+    # If in active persistent dialogue, use a seamless reaction
+    if in_dialogue and not is_oneoff:
         try:
-            await message.react(reactions=[ReactionTypeEmoji(emoji="✅")])
+            await message.react(reactions=[ReactionTypeEmoji(emoji="\u2705")])
             return  # Don't send a text message
         except Exception:
             pass  # Fallback to text if reactions fail
@@ -749,10 +762,14 @@ async def forward_anonymous_msg(
     conf_msg = await message.answer(
         sent_text, reply_markup=reply_markup, parse_mode="HTML"
     )
-    if in_dialogue:
+    if in_dialogue and not is_oneoff:
         await state.update_data(
             last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
         )
+
+    # Clear state after one-off confirmation so next message triggers "I don't understand"
+    if is_oneoff:
+        await state.clear()
 
 
 @router.message(Command("text"))
