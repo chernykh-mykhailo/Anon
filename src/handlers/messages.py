@@ -99,11 +99,14 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
         # --- CHECK AUTO_DIALOGUE ---
         is_auto = db.get_global_config("auto_dialogue", "1") == "1"
         if not is_auto:
-            # Clear state BEFORE returning so in_dialogue=False in forward → shows "Start Dialogue" button
             oneoff_num = anon_num or db.get_available_anon_num(
                 active_target_id, message.from_user.id
             )
+            # Preserve target_name so confirmation shows real name, then clear
+            saved_target_name = state_data.get("target_name")
             await state.clear()
+            if saved_target_name:
+                await state.update_data(target_name=saved_target_name)
             return active_target_id, reply_to_id, oneoff_num
 
         if not anon_num:
@@ -705,7 +708,8 @@ async def forward_anonymous_msg(
     in_dialogue = data.get("target_id") == target_id
     saved_name = data.get("target_name")
 
-    if in_dialogue and saved_name:
+    if saved_name:
+        # Sender knows the recipient (clicked link / has session) — use real name
         target_name_to_show = saved_name
     else:
         target_name_to_show = display_name or "№???"
