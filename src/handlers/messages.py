@@ -1,4 +1,4 @@
-﻿import os
+import os
 import logging
 
 from aiogram import Router, Bot, types, F
@@ -36,20 +36,6 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
     anon_num = state_data.get("anon_num")
     reply_to_id = None  # Reset for each message unless manual reply detected
 
-    session_minutes = int(db.get_global_config("session_time", "5"))
-    if active_target_id and session_minutes > 0:
-        last_ts = db.get_last_msg_timestamp(message.from_user.id, active_target_id)
-        if last_ts:
-            import time as _time
-
-            diff = _time.time() - last_ts
-            if diff > (session_minutes * 60):
-                db.delete_session(message.from_user.id, active_target_id)
-                await state.clear()
-                lang = await get_lang(message.from_user.id, message)
-                await message.answer(l10n.format_value("error.session_expired", lang))
-                return None, None, None
-
     # 1. Reply to an anonymous message (one-off forward priority)
     if message.reply_to_message:
         link = db.get_link_by_receiver(
@@ -60,15 +46,15 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
 
             # If it's a reply to someone ELSE than our active session, it's a one-off
             if reply_target_id != active_target_id:
-                # Use the number from the message itself if found, otherwise get directional one
+                # Use the number from the message itself if found, otherwise get persistent one
                 num_to_use = link_anon_num or db.get_available_anon_num(
                     reply_target_id, message.from_user.id
                 )
                 return reply_target_id, reply_to_id, num_to_use
 
-            # If it's a reply to the CURRENT active session, MUST use the message's number if possible
+            # If it's a reply to the CURRENT active session, use the message's number if possible
             if link_anon_num:
-                return reply_target_id, reply_to_id, link_anon_num
+                anon_num = link_anon_num
 
     # 2. Check for temporary "Write More" (one-off)
     temp_target_id = state_data.get("temp_target_id")
@@ -76,34 +62,55 @@ async def get_target_and_remind(message: Message, state: FSMContext, bot: Bot):
         temp_reply_to_id = state_data.get("temp_reply_to_id")
         num_to_use = db.get_available_anon_num(temp_target_id, message.from_user.id)
         # Clear temp target immediately so it doesn't persist
-        await state.update_data(
-            temp_target_id=None, temp_reply_to_id=None, anon_num=None
-        )
+        await state.update_data(temp_target_id=None, temp_reply_to_id=None)
         return temp_target_id, temp_reply_to_id, num_to_use
 
     # 3. Update persistent session if active
     if active_target_id:
+        # --- CHECK SESSION EXPIRY ---
+        import sqlite3 as _sqlite3
+        from datetime import datetime as _dt
+
+        session_minutes = int(db.get_global_config("session_time", "5"))
+        if session_minutes > 0:
+            with _sqlite3.connect(db.db_path) as _conn:
+                _c = _conn.cursor()
+                u1, u2 = sorted([message.from_user.id, active_target_id])
+                _c.execute(
+                    "SELECT updated_at FROM active_sessions WHERE user_a = ? AND user_b = ?",
+                    (u1, u2),
+                )
+                _res = _c.fetchone()
+            if _res:
+                try:
+                    updated_at = _dt.strptime(_res[0], "%Y-%m-%d %H:%M:%S")
+                    diff = (_dt.utcnow() - updated_at).total_seconds()
+                    if diff > (session_minutes * 60):
+                        db.delete_session(message.from_user.id, active_target_id)
+                        await state.clear()
+                        lang = await get_lang(message.from_user.id, message)
+                        await message.answer(
+                            l10n.format_value("error.session_expired", lang)
+                        )
+                        return None, None, None
+                except Exception as _e:
+                    logging.error(f"Session expiry check error: {_e}")
+
         # --- CHECK AUTO_DIALOGUE ---
         is_auto = db.get_global_config("auto_dialogue", "1") == "1"
         if not is_auto:
-            oneoff_num = db.get_available_anon_num(
-                active_target_id, message.from_user.id
-            )
-            # Preserve target_name for the confirmation message, then clear
-            saved_target_name = state_data.get("target_name")
+            # Auto-dialogue is OFF: clear FSM so next message is NOT in persistent state
             await state.clear()
-            if saved_target_name:
-                await state.update_data(target_name=saved_target_name)
-            return active_target_id, reply_to_id, oneoff_num
+            return None, None, None
 
-        # For persistent dialogue, ensure we have the correct directional number
-        # We don't trust state['anon_num'] alone here if it might be stale
-        current_anon_num = db.get_available_anon_num(
-            active_target_id, message.from_user.id
-        )
-        await state.update_data(target_id=active_target_id, anon_num=current_anon_num)
+        if not anon_num:
+            anon_num = db.get_available_anon_num(active_target_id, message.from_user.id)
+        else:
+            db.update_session(message.from_user.id, active_target_id)
+
+        await state.update_data(target_id=active_target_id, anon_num=anon_num)
         await state.set_state(Form.writing_message)
-        return active_target_id, reply_to_id, current_anon_num
+        return active_target_id, reply_to_id, anon_num
 
     return None, None, None
 
@@ -201,7 +208,7 @@ async def forward_anonymous_msg(
 
     # Determine display name for receiver
     # Default is the anonymous number
-    display_name = anon_num or data.get("anon_num") or "Ôäû???"
+    display_name = anon_num or data.get("anon_num") or "№???"
     receiver_display_name = display_name
 
     # Copy message with native reply
@@ -564,7 +571,7 @@ async def forward_anonymous_msg(
                         sender_id,
                         message.message_id,
                         message.chat.id,
-                        anon_num=display_name,
+                        anon_num=anon_num,
                     )
             except Exception:
                 # Fallback if effects fail (only if NOT in dialogue)
@@ -582,7 +589,7 @@ async def forward_anonymous_msg(
                         sender_id,
                         message.message_id,
                         message.chat.id,
-                        anon_num=display_name,
+                        anon_num=anon_num,
                     )
 
             if sent_msg_info:
@@ -642,7 +649,7 @@ async def forward_anonymous_msg(
                         sender_id,
                         message.message_id,
                         message.chat.id,
-                        anon_num=display_name,
+                        anon_num=anon_num,
                     )
         except Exception:
             if override_text:
@@ -662,7 +669,7 @@ async def forward_anonymous_msg(
                     sender_id,
                     message.message_id,
                     message.chat.id,
-                    anon_num=display_name,
+                    anon_num=anon_num,
                 )
 
         msg_id = sent_msg_info.message_id
@@ -695,18 +702,16 @@ async def forward_anonymous_msg(
     in_dialogue = data.get("target_id") == target_id
     saved_name = data.get("target_name")
 
-    # Show real name ONLY in active persistent dialogue where sender explicitly knows the target.
-    # For one-off ("Write More") and replies to anon messages — always show anon number.
     if in_dialogue and saved_name:
         target_name_to_show = saved_name
     else:
         target_name_to_show = display_name or "№???"
 
     if in_dialogue:
-        # If in dialogue, show 'Stop writing' button
+        # If in dialogue, only show 'Stop' and use the text about 5 minutes
         reply_markup = kb
     else:
-        # Not in dialogue (one-off or first msg) — show buttons to start dialogue or write more
+        # Even if not in dialogue, show buttons to start it or write more
         reply_markup = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
@@ -728,10 +733,10 @@ async def forward_anonymous_msg(
     # Clear reply_to_id after success to prevent it sticking in dialogue
     await state.update_data(reply_to_id=None)
 
-    # If in active persistent dialogue, use a seamless reaction
+    # If in dialogue, use a seamless reaction instead of a confirmation message
     if in_dialogue:
         try:
-            await message.react(reactions=[ReactionTypeEmoji(emoji="\u2705")])
+            await message.react(reactions=[ReactionTypeEmoji(emoji="✅")])
             return  # Don't send a text message
         except Exception:
             pass  # Fallback to text if reactions fail
@@ -741,16 +746,10 @@ async def forward_anonymous_msg(
     conf_msg = await message.answer(
         sent_text, reply_markup=reply_markup, parse_mode="HTML"
     )
-
     if in_dialogue:
         await state.update_data(
             last_conf_msg_id=conf_msg.message_id, last_conf_is_media=False
         )
-
-    # Clear state for one-off interactions if auto_dialogue is off
-    is_auto = db.get_global_config("auto_dialogue", "1") == "1"
-    if not is_auto:
-        await state.clear()
 
 
 @router.message(Command("text"))
@@ -1338,19 +1337,8 @@ def get_draw_kb(s: dict, lang: str) -> InlineKeyboardMarkup:
 async def process_reply(
     message: Message, bot: Bot, state: FSMContext, album: List[Message] = None
 ):
-    # Check if we are already in an active dialogue
-    data = await state.get_data()
-    active_target_id = data.get("target_id")
-
     # This will sync target from reply
     target_id, reply_to_id, anon_num = await get_target_and_remind(message, state, bot)
-
-    # RECOVERY: If we were in dialogue and replied to the SAME person,
-    # get_target_and_remind might have returned it as a one-off.
-    # We should restore the dialogue state if it matches.
-    if active_target_id and target_id == active_target_id:
-        await state.set_state(Form.writing_message)
-        await state.update_data(target_id=active_target_id)
 
     if target_id:
         await forward_anonymous_msg(
@@ -1388,13 +1376,11 @@ async def process_anonymous_message(
         await state.clear()
         return
 
-    # If not already provided (e.g. from process_unknown), check state data
+    # If not already provided (e.g. from process_unknown), find it
     if not target_id:
-        data = await state.get_data()
-        target_id = data.get("target_id")
-
-    # Always refresh target and anon_num to ensure directional accuracy
-    target_id, reply_to_id, anon_num = await get_target_and_remind(message, state, bot)
+        target_id, r_to_id, a_num = await get_target_and_remind(message, state, bot)
+        reply_to_id = reply_to_id or r_to_id
+        anon_num = anon_num or a_num
 
     if target_id:
         # Check for Auto-Voice setting
@@ -1409,7 +1395,6 @@ async def process_anonymous_message(
                 message, state, bot, cmd_obj, check_cd=True
             )
 
-        data = await state.get_data()
         await forward_anonymous_msg(
             bot,
             message,
@@ -1417,7 +1402,7 @@ async def process_anonymous_message(
             message.from_user.id,
             state,
             reply_to_id=reply_to_id,
-            anon_num=anon_num or data.get("anon_num"),
+            anon_num=anon_num,
             album=album,
             check_cd=True,
         )
@@ -1442,7 +1427,7 @@ async def process_setting_cooldown(message: Message, state: FSMContext):
         )
         await state.clear()
     else:
-        await message.answer(l10n.format_value("admin.enter_cooldown", lang))
+        await message.answer("Будь ласка, введіть число (секунди):")
 
 
 @router.message(Form.setting_session_time)
@@ -1453,31 +1438,22 @@ async def process_setting_session_time(message: Message, state: FSMContext):
         await state.clear()
         return
 
-    lang = await get_lang(message.from_user.id, message)
     text = message.text.strip()
     if text.isdigit():
         new_time = int(text)
         db.set_global_config("session_time", new_time)
-        display = (
-            f"{new_time} хв." if new_time > 0 else l10n.format_value("status_off", lang)
-        )
+        display = f"{new_time} хв." if new_time > 0 else "∞ (безлім')"
         await message.answer(
-            l10n.format_value("admin.session_time_set", lang, display=display),
-            parse_mode="HTML",
+            f"✅ Час сесії встановлено: <code>{display}</code>", parse_mode="HTML"
         )
         await state.clear()
     else:
-        await message.answer(l10n.format_value("admin.enter_session_time", lang))
+        await message.answer("Пожалуйста, введіть число хвилин (0 = безлім):")
 
 
 @router.message()
 async def process_unknown(message: Message, state: FSMContext):
-    # 1. Check if user is already in 'writing' state (active dialogue)
-    current_state = await state.get_state()
-    if current_state == Form.writing_message:
-        return await process_anonymous_message(message, state, message.bot)
-
-    # 2. Only answer if it's not a reply (replies are handled above)
+    # Only answer if it's not a reply (replies are handled above)
     # AND only in PRIVATE chats to avoid spamming groups
     if not message.reply_to_message and message.chat.type == "private":
         target_id, reply_to_id, anon_num = await get_target_and_remind(

@@ -356,17 +356,16 @@ class Database:
             return True, 0
 
     def get_available_anon_num(self, target_id: int, sender_id: int) -> str:
-        """Find or create a persistent random number for this pair of users (Directional)."""
-        # We no longer sort IDs to ensure that A->B and B->A can have different numbers
-        u_sender, u_target = sender_id, target_id
+        """Find or create a persistent random number for this pair of users."""
+        u1, u2 = sorted([target_id, sender_id])
 
-        # 1. First check if a number is already assigned for THIS direction
+        # 1. First check if a number is already assigned
         existing_num = None
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 "SELECT anon_num FROM active_sessions WHERE user_a = ? AND user_b = ?",
-                (u_sender, u_target),
+                (u1, u2),
             )
             res = cursor.fetchone()
             if res:
@@ -376,17 +375,17 @@ class Database:
             self.update_session(sender_id, target_id)
             return existing_num
 
-        # 2. If not, find a new one that isn't used by THIS sender for anyone else,
-        # AND isn't the number that the target uses for this sender (to avoid correlation).
+        # 2. If not, find a new one
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
                 """
                 SELECT anon_num FROM active_sessions 
-                WHERE (user_a = ? OR (user_a = ? AND user_b = ?))
+                WHERE (user_a = ? OR user_b = ?) 
+                AND NOT (user_a = ? AND user_b = ?)
                 AND updated_at > datetime('now', '-30 days')
                 """,
-                (u_sender, u_target, u_sender),
+                (target_id, target_id, u1, u2),
             )
             taken_nums = {row[0] for row in cursor.fetchall()}
 
@@ -403,14 +402,15 @@ class Database:
                 if available_secondary:
                     picked = random.choice(available_secondary)
                 else:
+                    # If somehow 1000 numbers are taken (unlikely for 30d inactive), random high number
                     picked = f"№{random.randint(1000, 9999):03d}"
 
         self.update_session(sender_id, target_id, picked)
         return picked
 
     def update_session(self, sender_id: int, receiver_id: int, anon_num: str = None):
-        """Register or update a shared session for a user pair (Directional)."""
-        u_sender, u_target = sender_id, receiver_id
+        """Register or update a shared session for a user pair."""
+        u1, u2 = sorted([sender_id, receiver_id])
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             if anon_num:
@@ -422,22 +422,22 @@ class Database:
                         anon_num = excluded.anon_num,
                         updated_at = CURRENT_TIMESTAMP
                     """,
-                    (u_sender, u_target, anon_num),
+                    (u1, u2, anon_num),
                 )
             else:
                 cursor.execute(
                     "UPDATE active_sessions SET updated_at = CURRENT_TIMESTAMP WHERE user_a = ? AND user_b = ?",
-                    (u_sender, u_target),
+                    (u1, u2),
                 )
             conn.commit()
 
     def delete_session(self, user_id_1: int, user_id_2: int):
-        """Delete directional sessions between two users (both ways)."""
+        """Delete a shared session (e.g. on /cancel)."""
+        u1, u2 = sorted([user_id_1, user_id_2])
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()
             cursor.execute(
-                "DELETE FROM active_sessions WHERE (user_a = ? AND user_b = ?) OR (user_a = ? AND user_b = ?)",
-                (user_id_1, user_id_2, user_id_2, user_id_1),
+                "DELETE FROM active_sessions WHERE user_a = ? AND user_b = ?", (u1, u2)
             )
             conn.commit()
 

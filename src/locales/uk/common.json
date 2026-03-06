@@ -67,8 +67,8 @@
     "voice_ava_short": "🇺🇸 Ava (Multi)",
     "voice_andrew_short": "🇺🇸 Andrew (Multi)",
     "voice_rnd_short": "🎲 Рандом",
-    "writing_to": "Ти пишеш анонімне повідомлення для {name} ✨\n\n<blockquote>Сесія діє {session_info}.\nВикористовуй <code>/cancel</code> щоб зупинити діалог.\n\n<i>Використовуй /help щоб дізнатися про всі можливості</i></blockquote>",
-    "writing_to_oneoff": "Ти пишеш анонімне повідомлення для {name} ✨\n\n<blockquote>ℹ️ Авто-діалог вимкнено — це одинарне повідомлення.\nВикористовуй <code>/cancel</code> щоб скасувати.\n\n<i>Використовуй /help щоб дізнатися про всі можливості</i></blockquote>",
+    "writing_to": "Ти пишеш анонімне повідомлення. Напиши будь-що або надішли медіа ✨\n\n<blockquote>Сесія діє {session_info}.\nВикористовуй <code>/cancel</code> щоб зупинити діалог.</blockquote>\n\n<i>Використовуй /help щоб дізнатися про всі можливості</i>",
+    "writing_to_user": "Ти пишеш анонімне повідомлення для <b>{name}</b> 👤\n\nНапиши будь-що або надішли медіа ✨\n\n<blockquote>Сесія діє {session_info}.\nВикористовуй <code>/cancel</code> щоб зупинити діалог. \n\n<i>Використовуй /help щоб дізнатися про всі можливості</i></blockquote>",
     "still_writing_to": "Ти все ще пишеш <b>{name}</b> 👤",
     "msg_sent": "Повідомлення надіслано! ✅",
     "msg_sent_to": "Повідомлення для <b>{name}</b> надіслано! ✅",
@@ -121,9 +121,6 @@
     },
     "admin": {
         "log_activated": "✅ Логи активовано для цього чату: <code>{chat_id}</code>{thread_info}\n\n<i>Зміни збережено в .env. Бот тепер шле сюди репорти.</i>",
-        "cooldown_set": "Затримку встановлено: {seconds} сек. ✅",
-        "enter_cooldown": "Будь ласка, введіть число (секунди) для КД між повідомленнями:",
-        "session_time_set": "✅ Час сесії встановлено: <code>{display}</code>",
-        "enter_session_time": "Будь ласка, введіть число хвилин для сесії (0 = безлім):"
+        "cooldown_set": "Затримку встановлено: {seconds} сек. ✅"
     }
 }
