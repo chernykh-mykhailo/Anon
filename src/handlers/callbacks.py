@@ -187,11 +187,11 @@ async def start_dialogue_callback(callback: types.CallbackQuery, state: FSMConte
 
 @router.callback_query(F.data.startswith("send_again_"))
 async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
-    """Callback for a ONE-OFF message (Write More). Does NOT start a dialogue."""
+    """Callback for a ONE-OFF message (Write More)."""
     try:
         target_id = int(callback.data.split("_")[-1])
         lang = await get_lang(callback.from_user.id, callback.message)
-        session_info = _get_session_info(lang)
+        is_auto = db.get_global_config("auto_dialogue", "1") == "1"
 
         await state.update_data(temp_target_id=target_id, temp_reply_to_id=None)
         await state.set_state(Form.writing_message)
@@ -207,11 +207,14 @@ async def send_again_callback(callback: types.CallbackQuery, state: FSMContext):
             ]
         )
 
-        await callback.message.answer(
-            l10n.format_value("writing_to", lang, session_info=session_info),
-            parse_mode="HTML",
-            reply_markup=kb_stop,
-        )
+        if is_auto:
+            text = l10n.format_value(
+                "writing_to", lang, session_info=_get_session_info(lang)
+            )
+        else:
+            text = l10n.format_value("writing_to_oneoff", lang)
+
+        await callback.message.answer(text, parse_mode="HTML", reply_markup=kb_stop)
         await callback.answer()
     except Exception:
         await callback.answer()
