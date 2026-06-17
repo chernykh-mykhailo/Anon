@@ -3,7 +3,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 0))
+ADMIN_IDS = [
+    int(i.strip()) for i in os.getenv("ADMIN_IDS", "").split(",") if i.strip().isdigit()
+]
+# Fallback to old single ID if list is empty for backward compatibility
+if not ADMIN_IDS and os.getenv("ADMIN_ID"):
+    ADMIN_IDS = [int(os.getenv("ADMIN_ID"))]
 REPORT_CHAT_ID = int(os.getenv("REPORT_CHAT_ID", 0))
 REPORT_THREAD_ID = int(os.getenv("REPORT_THREAD_ID", 0))
 DB_PATH = os.path.join(

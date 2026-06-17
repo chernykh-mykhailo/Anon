@@ -41,6 +41,10 @@ async def main():
     # Register commands in menu
     await commands.set_commands(bot)
 
+    # Start background tasks
+    from tasks.session_cleaner import clean_stale_sessions
+    asyncio.create_task(clean_stale_sessions(bot, dp.storage))
+
     # Startup
     print("Bot started...")
     await dp.start_polling(bot)

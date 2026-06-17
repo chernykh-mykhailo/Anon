@@ -1,6 +1,9 @@
 {
     "welcome": "Hello there!🌸 This is an anonymous message bot. 🎭\n\nSend your link to friends or post it on your profile, and they can write to you anonymously.\n\n<b>Rules of the game:</b>\n<blockquote>— Use /link to get your personal link.\n— Use /settings to manage privacy.\n— Use /pic to create a beautiful card.\n— You can <b>reply</b> to messages (one-off messages).\n— To chat without replying, click the <b>'Start Dialogue'</b> button. Session lasts 5 minutes.\n— Use /lang to change the language.\n— <b>Anonymization:</b> your voices and video notes are automatically pitch-shifted.\n— <b>AI Voice:</b> type <code>/voice </code> [text].\n— If someone spams: <code>/block</code> or <code>/report</code>.</blockquote>",
     "your_link": "Your link for anonymous messages:\n<code>{link}</code>",
+    "label": {
+        "owner": "Owner"
+    },
     "button": {
         "get_link": "🔗 My Link",
         "help": "❓ Help",
@@ -121,5 +124,13 @@
     "admin": {
         "log_activated": "✅ Logs activated for this chat: <code>{chat_id}</code>{thread_info}\n\n<i>Changes saved. Reports will be sent here.</i>",
         "cooldown_set": "Cooldown set to: {seconds} sec. ✅"
+    },
+    "admin_panel": {
+        "title": "💎 <b>ADMIN PANEL</b> 💎\n\n👤 Users: <code>{total_users}</code>\n💬 Messages: <code>{msg_total}</code>\n🚫 Blocks: <code>{total_blocks}</code>\n🔥 Active Sessions: <code>{active_sessions}</code>\n⏳ Cooldown: <code>{global_cd}s</code>\n\n🌍 <b>Languages:</b>\n{langs}\n\n🕒 Updated: <code>{time}</code>",
+        "btn_refresh": "🔄 Refresh",
+        "btn_broadcast": "📢 Broadcast",
+        "btn_cooldown": "⏳ Set Cooldown",
+        "btn_logs": "📜 Logs",
+        "btn_settings": "⚙️ Settings"
     }
 }
