@@ -34,6 +34,8 @@ async def get_lang(
 
 
 async def get_user_link(bot_info, user_id: int) -> str:
+    if hasattr(bot_info, "get_me"):
+        bot_info = await bot_info.get_me()
     return f"https://t.me/{bot_info.username}?start={user_id}"
 
 

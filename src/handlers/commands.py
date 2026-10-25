@@ -77,11 +77,14 @@ async def cmd_start_handler(
 
 
 @router.message(Command("link"))
-async def cmd_link(message: Message):
+async def cmd_link(message: Message, bot: Bot):
     lang = await get_lang(message.from_user.id, message)
-    link = get_user_link(message.from_user.id)
+    bot_info = await bot.get_me()
+    link = await get_user_link(bot_info, message.from_user.id)
     await message.answer(
-        l10n.format_value("your_link", lang, link=link), parse_mode="HTML"
+        l10n.format_value("your_link", lang, link=link),
+        parse_mode="HTML",
+        disable_web_page_preview=True,
     )
 
 
